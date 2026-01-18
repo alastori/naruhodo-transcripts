@@ -8,6 +8,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from .config import (
+    DOWNLOADS_PER_RATE_LIMIT,
+    RATE_LIMIT_WAIT_SECONDS,
+    SECONDS_PER_DOWNLOAD,
+    SUBPROCESS_TIMEOUT,
+)
 from .logging_config import ProgressLogger
 
 logger = logging.getLogger("naruhodo")
@@ -161,7 +167,7 @@ class TranscriptDownloader:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=120,
+                timeout=SUBPROCESS_TIMEOUT,
             )
 
             # Check output for specific errors
@@ -231,9 +237,9 @@ def estimate_cost(pending: int) -> dict:
     Returns:
         Dictionary with cost estimates
     """
-    download_time = pending * 3  # ~3 seconds per request
-    rate_limits = pending // 60  # Rate limit expected every ~60 requests
-    wait_time = rate_limits * 3600  # 1 hour per rate limit
+    download_time = pending * SECONDS_PER_DOWNLOAD
+    rate_limits = pending // DOWNLOADS_PER_RATE_LIMIT
+    wait_time = rate_limits * RATE_LIMIT_WAIT_SECONDS
     total_seconds = download_time + wait_time
 
     return {

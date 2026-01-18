@@ -11,10 +11,9 @@ from typing import Optional
 
 import requests
 
-logger = logging.getLogger("naruhodo")
+from .config import RSS_FEED_URL, RSS_REQUEST_TIMEOUT
 
-# Naruhodo RSS feed URL
-RSS_FEED_URL = "https://feeds.simplecast.com/hwQVm5gy"
+logger = logging.getLogger("naruhodo")
 
 # Patterns for sponsor filtering
 SPONSOR_PATTERNS = [
@@ -227,7 +226,7 @@ def fetch_rss_feed(url: str = RSS_FEED_URL, cache_path: Optional[Path] = None) -
         RSS feed XML content
     """
     logger.info("Fetching RSS feed from %s", url)
-    response = requests.get(url, timeout=30)
+    response = requests.get(url, timeout=RSS_REQUEST_TIMEOUT)
     response.raise_for_status()
     content = response.text
 

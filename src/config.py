@@ -1,0 +1,26 @@
+"""Central configuration for naruhodo-transcripts."""
+
+from pathlib import Path
+
+# Project paths (relative to this file's location)
+PROJECT_ROOT = Path(__file__).parent.parent
+DATA_DIR = PROJECT_ROOT / "data"
+TRANSCRIPTS_DIR = PROJECT_ROOT / "transcripts"
+LOGS_DIR = PROJECT_ROOT / "temp" / "logs"
+EPISODES_JSON = DATA_DIR / "episodes.json"
+EPISODE_INDEX = DATA_DIR / "episode-index.md"
+
+# RSS feed
+RSS_FEED_URL = "https://feeds.simplecast.com/hwQVm5gy"
+RSS_REQUEST_TIMEOUT = 30  # seconds
+
+# YouTube
+YOUTUBE_PLAYLIST_URL = "https://www.youtube.com/playlist?list=UUPzA7lZCeFiafe9V9bamISw"
+
+# Downloader
+SUBPROCESS_TIMEOUT = 120  # seconds for yt-dlp commands
+
+# Rate limiting estimates
+SECONDS_PER_DOWNLOAD = 3  # Average time per download request
+DOWNLOADS_PER_RATE_LIMIT = 60  # Approximate number of downloads before rate limit
+RATE_LIMIT_WAIT_SECONDS = 3600  # 1 hour wait after rate limit
