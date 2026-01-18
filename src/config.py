@@ -5,7 +5,7 @@ from pathlib import Path
 # Project paths (relative to this file's location)
 PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
-TRANSCRIPTS_DIR = PROJECT_ROOT / "transcripts"
+TRANSCRIPTS_DIR = DATA_DIR / "transcripts"
 LOGS_DIR = PROJECT_ROOT / "temp" / "logs"
 EPISODES_JSON = DATA_DIR / "episodes.json"
 EPISODE_INDEX = DATA_DIR / "episode-index.md"

@@ -331,8 +331,18 @@ def cmd_sync(args):
     return 0
 
 
+def ensure_directories():
+    """Create required directories if they don't exist."""
+    TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
 def main():
     """Main entry point."""
+    # Ensure required directories exist
+    ensure_directories()
+
     parser = argparse.ArgumentParser(
         prog="naruhodo",
         description="Download and manage Naruhodo podcast transcripts",

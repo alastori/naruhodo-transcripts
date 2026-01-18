@@ -107,8 +107,8 @@ naruhodo-transcripts/
 │   └── logging_config.py  # Logging setup
 ├── data/
 │   ├── episodes.json      # Episode metadata (in repo)
-│   └── episode-index.md   # Human-readable index (in repo)
-├── transcripts/           # Downloaded VTT files (gitignored)
+│   ├── episode-index.md   # Human-readable index (in repo)
+│   └── transcripts/       # Downloaded VTT files (gitignored)
 └── temp/
     └── logs/              # Download logs (gitignored)
 ```
@@ -137,7 +137,7 @@ Each episode in `data/episodes.json` has the following fields:
 
 | Symbol | Meaning | Description |
 |--------|---------|-------------|
-| ✅ Downloaded | Transcript available | VTT file exists in `transcripts/` |
+| ✅ Downloaded | Transcript available | VTT file exists in `data/transcripts/` |
 | ⬜ Pending | Ready to download | Has YouTube link, not yet downloaded |
 | 🔗 No Link | Missing YouTube link | Cannot download until link is discovered |
 

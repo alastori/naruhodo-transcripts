@@ -1,6 +1,9 @@
 # Transcripts (users download their own)
-transcripts/
+data/transcripts/
 *.vtt
+
+# Deprecated scripts directory
+scripts/
 
 # Temporary files and logs
 temp/
