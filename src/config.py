@@ -13,6 +13,9 @@ EPISODE_INDEX = DATA_DIR / "episode-index.md"
 # RSS feed
 RSS_FEED_URL = "https://feeds.simplecast.com/hwQVm5gy"
 RSS_REQUEST_TIMEOUT = 30  # seconds
+RSS_MAX_RETRIES = 3
+RSS_INITIAL_RETRY_DELAY = 1.0  # seconds
+RSS_RETRY_BACKOFF_FACTOR = 2.0
 
 # YouTube
 YOUTUBE_PLAYLIST_URL = "https://www.youtube.com/playlist?list=UUPzA7lZCeFiafe9V9bamISw"

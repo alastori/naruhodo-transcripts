@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+import time
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from html import unescape
@@ -11,7 +12,13 @@ from typing import Optional
 
 import requests
 
-from .config import RSS_FEED_URL, RSS_REQUEST_TIMEOUT
+from .config import (
+    RSS_FEED_URL,
+    RSS_INITIAL_RETRY_DELAY,
+    RSS_MAX_RETRIES,
+    RSS_REQUEST_TIMEOUT,
+    RSS_RETRY_BACKOFF_FACTOR,
+)
 
 logger = logging.getLogger("naruhodo")
 
@@ -216,7 +223,7 @@ def synthesize_summary(description: str, title: str, max_chars: int = 120) -> st
 
 
 def fetch_rss_feed(url: str = RSS_FEED_URL, cache_path: Optional[Path] = None) -> str:
-    """Fetch RSS feed from URL or cache.
+    """Fetch RSS feed from URL with retry logic.
 
     Args:
         url: RSS feed URL
@@ -224,17 +231,47 @@ def fetch_rss_feed(url: str = RSS_FEED_URL, cache_path: Optional[Path] = None) -
 
     Returns:
         RSS feed XML content
+
+    Raises:
+        requests.RequestException: If all retry attempts fail
     """
     logger.info("Fetching RSS feed from %s", url)
-    response = requests.get(url, timeout=RSS_REQUEST_TIMEOUT)
-    response.raise_for_status()
-    content = response.text
 
-    if cache_path:
-        cache_path.write_text(content, encoding="utf-8")
-        logger.debug("Cached RSS feed to %s", cache_path)
+    delay = RSS_INITIAL_RETRY_DELAY
+    last_error = None
 
-    return content
+    for attempt in range(RSS_MAX_RETRIES):
+        try:
+            response = requests.get(url, timeout=RSS_REQUEST_TIMEOUT)
+            response.raise_for_status()
+            content = response.text
+
+            if cache_path:
+                cache_path.write_text(content, encoding="utf-8")
+                logger.debug("Cached RSS feed to %s", cache_path)
+
+            return content
+
+        except (requests.Timeout, requests.ConnectionError) as e:
+            last_error = e
+            if attempt < RSS_MAX_RETRIES - 1:
+                logger.warning(
+                    "RSS fetch failed (attempt %d/%d): %s. Retrying in %.1fs...",
+                    attempt + 1,
+                    RSS_MAX_RETRIES,
+                    str(e),
+                    delay,
+                )
+                time.sleep(delay)
+                delay *= RSS_RETRY_BACKOFF_FACTOR
+            else:
+                logger.error(
+                    "RSS fetch failed after %d attempts: %s",
+                    RSS_MAX_RETRIES,
+                    str(e),
+                )
+
+    raise last_error
 
 
 def parse_rss(content: str) -> list[dict]:

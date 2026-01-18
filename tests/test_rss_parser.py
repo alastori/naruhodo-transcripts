@@ -3,6 +3,9 @@
 import json
 import pytest
 from pathlib import Path
+from unittest.mock import patch, MagicMock
+
+import requests
 
 from src.rss_parser import (
     clean_html,
@@ -18,6 +21,7 @@ from src.rss_parser import (
     load_episodes,
     save_episodes,
     merge_episodes,
+    fetch_rss_feed,
 )
 
 
@@ -456,3 +460,88 @@ class TestMergeEpisodes:
         assert merged[0]["summary"] == "New summary"
         # Status preserved from existing
         assert merged[0]["status"] == "✅ Downloaded"
+
+
+class TestFetchRssFeed:
+    """Tests for fetch_rss_feed function with retry logic."""
+
+    @patch("src.rss_parser.requests.get")
+    def test_successful_fetch(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.text = "<rss>content</rss>"
+        mock_get.return_value = mock_response
+
+        result = fetch_rss_feed("https://example.com/feed")
+
+        assert result == "<rss>content</rss>"
+        mock_get.assert_called_once()
+
+    @patch("src.rss_parser.requests.get")
+    def test_caches_to_file(self, mock_get, tmp_path):
+        mock_response = MagicMock()
+        mock_response.text = "<rss>cached</rss>"
+        mock_get.return_value = mock_response
+
+        cache_path = tmp_path / "cache.xml"
+        result = fetch_rss_feed("https://example.com/feed", cache_path=cache_path)
+
+        assert result == "<rss>cached</rss>"
+        assert cache_path.exists()
+        assert cache_path.read_text() == "<rss>cached</rss>"
+
+    @patch("src.rss_parser.time.sleep")
+    @patch("src.rss_parser.requests.get")
+    def test_retries_on_timeout(self, mock_get, mock_sleep):
+        # First call times out, second succeeds
+        mock_response = MagicMock()
+        mock_response.text = "<rss>success</rss>"
+        mock_get.side_effect = [
+            requests.Timeout("Connection timed out"),
+            mock_response,
+        ]
+
+        result = fetch_rss_feed("https://example.com/feed")
+
+        assert result == "<rss>success</rss>"
+        assert mock_get.call_count == 2
+        mock_sleep.assert_called_once()
+
+    @patch("src.rss_parser.time.sleep")
+    @patch("src.rss_parser.requests.get")
+    def test_retries_on_connection_error(self, mock_get, mock_sleep):
+        # First two calls fail, third succeeds
+        mock_response = MagicMock()
+        mock_response.text = "<rss>success</rss>"
+        mock_get.side_effect = [
+            requests.ConnectionError("Connection refused"),
+            requests.ConnectionError("Connection reset"),
+            mock_response,
+        ]
+
+        result = fetch_rss_feed("https://example.com/feed")
+
+        assert result == "<rss>success</rss>"
+        assert mock_get.call_count == 3
+        assert mock_sleep.call_count == 2
+
+    @patch("src.rss_parser.time.sleep")
+    @patch("src.rss_parser.requests.get")
+    def test_raises_after_max_retries(self, mock_get, mock_sleep):
+        mock_get.side_effect = requests.Timeout("Connection timed out")
+
+        with pytest.raises(requests.Timeout):
+            fetch_rss_feed("https://example.com/feed")
+
+        assert mock_get.call_count == 3  # RSS_MAX_RETRIES
+
+    @patch("src.rss_parser.requests.get")
+    def test_does_not_retry_http_errors(self, mock_get):
+        # HTTP errors (4xx, 5xx) should not trigger retries
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = requests.HTTPError("404 Not Found")
+        mock_get.return_value = mock_response
+
+        with pytest.raises(requests.HTTPError):
+            fetch_rss_feed("https://example.com/feed")
+
+        mock_get.assert_called_once()  # No retries
