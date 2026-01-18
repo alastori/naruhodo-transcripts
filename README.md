@@ -99,9 +99,11 @@ naruhodo-transcripts/
 ├── src/
 │   ├── __init__.py
 │   ├── cli.py             # Main entry point
+│   ├── config.py          # Configuration values
 │   ├── downloader.py      # yt-dlp wrapper with retry logic
 │   ├── rss_parser.py      # RSS feed parsing
 │   ├── index_generator.py # Index generation
+│   ├── youtube_discovery.py # YouTube link matching
 │   └── logging_config.py  # Logging setup
 ├── data/
 │   ├── episodes.json      # Episode metadata (in repo)
@@ -109,6 +111,54 @@ naruhodo-transcripts/
 ├── transcripts/           # Downloaded VTT files (gitignored)
 └── temp/
     └── logs/              # Download logs (gitignored)
+```
+
+## Data Schema
+
+### episodes.json
+
+Each episode in `data/episodes.json` has the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `title` | string | Episode title from RSS feed |
+| `episode_number` | string | Episode number (e.g., "400") or empty if not applicable |
+| `date` | string | Publication date in YYYY-MM-DD format |
+| `duration` | string | Episode duration (e.g., "01:23:45" or "45:30") |
+| `description` | string | Full episode description from RSS |
+| `summary` | string | Synthesized 1-2 sentence summary |
+| `guest` | string | Guest name for interview episodes |
+| `link` | string | Link to podcast episode page |
+| `youtube_link` | string | YouTube video URL for transcript download |
+| `status` | string | Download status (see below) |
+| `references` | array | List of reference URLs from description |
+
+### Status Symbols
+
+| Symbol | Meaning | Description |
+|--------|---------|-------------|
+| ✅ Downloaded | Transcript available | VTT file exists in `transcripts/` |
+| ⬜ Pending | Ready to download | Has YouTube link, not yet downloaded |
+| 🔗 No Link | Missing YouTube link | Cannot download until link is discovered |
+
+### Example Episode
+
+```json
+{
+  "title": "Naruhodo #400 - Por que gostamos de listas?",
+  "episode_number": "400",
+  "date": "2024-01-15",
+  "duration": "01:12:45",
+  "description": "Full episode description...",
+  "summary": "Exploramos a psicologia por trás de nossa fascinação com listas.",
+  "guest": "",
+  "link": "https://naruhodo.b9.com.br/...",
+  "youtube_link": "https://www.youtube.com/watch?v=...",
+  "status": "✅ Downloaded",
+  "references": [
+    "https://doi.org/10.1000/example"
+  ]
+}
 ```
 
 ## Legal Disclaimer
