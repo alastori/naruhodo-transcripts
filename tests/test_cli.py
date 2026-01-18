@@ -83,7 +83,7 @@ class TestCmdStatus:
     ):
         mock_logging.return_value = MagicMock()
         mock_load.return_value = [{"title": "Episode 1"}]
-        mock_update.return_value = (50, 100)
+        mock_update.return_value = (50, 100, 10)  # downloaded, pending, no_link
 
         result = cmd_status(args)
 
@@ -91,6 +91,7 @@ class TestCmdStatus:
         captured = capsys.readouterr()
         assert "50" in captured.out  # downloaded
         assert "100" in captured.out  # pending
+        assert "10" in captured.out  # no_link
 
     @patch("src.cli.estimate_cost")
     @patch("src.cli.update_episode_status")
@@ -101,7 +102,7 @@ class TestCmdStatus:
     ):
         mock_logging.return_value = MagicMock()
         mock_load.return_value = [{"title": "Episode 1"}]
-        mock_update.return_value = (0, 10)
+        mock_update.return_value = (0, 10, 0)  # downloaded, pending, no_link
         mock_cost.return_value = {
             "requests": 10,
             "download_minutes": 1,
@@ -151,7 +152,7 @@ class TestCmdRefreshIndex:
         mock_parse.return_value = [{"title": "Ep 1"}, {"title": "Ep 2"}]
         mock_load.return_value = []
         mock_merge.return_value = [{"title": "Ep 1"}, {"title": "Ep 2"}]
-        mock_update.return_value = (1, 1)
+        mock_update.return_value = (1, 1, 0)  # downloaded, pending, no_link
         mock_generate.return_value = "# Index"
 
         result = cmd_refresh_index(args)
@@ -198,7 +199,7 @@ class TestCmdSync:
         mock_load.return_value = [
             {"title": "Ep 1", "status": "✅ Downloaded", "youtube_link": ""},
         ]
-        mock_update.return_value = (1, 0)
+        mock_update.return_value = (1, 0, 0)  # downloaded, pending, no_link
 
         result = cmd_sync(args)
 
@@ -229,7 +230,7 @@ class TestCmdSync:
         mock_load.return_value = [
             {"title": "Ep 1", "status": "⬜ Pending", "youtube_link": "https://youtube.com/watch?v=abc"},
         ]
-        mock_update.return_value = (0, 1)
+        mock_update.return_value = (0, 1, 0)  # downloaded, pending, no_link
         mock_sync.return_value = {
             "downloaded": 1,
             "skipped": 0,
@@ -256,7 +257,7 @@ class TestCmdSync:
         mock_load.return_value = [
             {"title": "Ep 1", "status": "⬜ Pending", "youtube_link": "https://youtube.com/watch?v=abc"},
         ]
-        mock_update.return_value = (0, 1)
+        mock_update.return_value = (0, 1, 0)  # downloaded, pending, no_link
 
         with patch("sys.stdin") as mock_stdin:
             mock_stdin.isatty.return_value = True
@@ -278,7 +279,7 @@ class TestCmdSync:
         mock_load.return_value = [
             {"title": "Ep 1", "status": "⬜ Pending", "youtube_link": "https://youtube.com/watch?v=abc"},
         ]
-        mock_update.return_value = (0, 1)
+        mock_update.return_value = (0, 1, 0)  # downloaded, pending, no_link
 
         with patch("sys.stdin") as mock_stdin:
             mock_stdin.isatty.return_value = False

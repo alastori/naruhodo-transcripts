@@ -51,7 +51,7 @@ def get_downloaded_episodes(transcripts_dir: Path) -> tuple[set[str], set[str]]:
 def update_episode_status(
     episodes: list[dict],
     transcripts_dir: Path,
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     """Update episode download status based on existing files.
 
     Args:
@@ -59,7 +59,7 @@ def update_episode_status(
         transcripts_dir: Directory containing transcript files
 
     Returns:
-        Tuple of (downloaded_count, pending_count)
+        Tuple of (downloaded_count, pending_count, no_link_count)
     """
     downloaded_numbers, downloaded_titles = get_downloaded_episodes(transcripts_dir)
 
@@ -71,6 +71,7 @@ def update_episode_status(
 
     downloaded_count = 0
     pending_count = 0
+    no_link_count = 0
 
     for ep in episodes:
         title = ep["title"]
@@ -107,17 +108,21 @@ def update_episode_status(
         if is_downloaded:
             ep["status"] = "✅ Downloaded"
             downloaded_count += 1
+        elif not ep.get("youtube_link"):
+            ep["status"] = "🔗 No Link"
+            no_link_count += 1
         else:
             ep["status"] = "⬜ Pending"
             pending_count += 1
 
-    return downloaded_count, pending_count
+    return downloaded_count, pending_count, no_link_count
 
 
 def generate_index_markdown(
     episodes: list[dict],
     downloaded_count: int,
     pending_count: int,
+    no_link_count: int = 0,
 ) -> str:
     """Generate markdown index content.
 
@@ -125,6 +130,7 @@ def generate_index_markdown(
         episodes: List of episode dictionaries
         downloaded_count: Number of downloaded episodes
         pending_count: Number of pending episodes
+        no_link_count: Number of episodes without YouTube link
 
     Returns:
         Markdown content as string
@@ -134,7 +140,8 @@ def generate_index_markdown(
         "",
         f"Total episodes in RSS feed: {len(episodes)}",
         f"Transcripts downloaded: {downloaded_count}",
-        f"Pending: {pending_count}",
+        f"Pending (with YouTube link): {pending_count}",
+        f"Missing YouTube link: {no_link_count}",
         "",
         f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         "",

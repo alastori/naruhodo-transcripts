@@ -49,13 +49,18 @@ def cmd_status(args):
         return 1
 
     # Update status based on downloaded files
-    downloaded, pending = update_episode_status(episodes, TRANSCRIPTS_DIR)
+    downloaded, pending, no_link = update_episode_status(episodes, TRANSCRIPTS_DIR)
 
     print_banner()
     print("Current status:")
     print(f"  ├─ Episodes in metadata:       {len(episodes)}")
     print(f"  ├─ Transcripts downloaded:     {downloaded}")
-    print(f"  └─ Pending downloads:          {pending}")
+    print(f"  ├─ Pending downloads:          {pending}")
+    print(f"  └─ Missing YouTube link:       {no_link}")
+
+    if no_link > 0:
+        print(f"\n⚠️  {no_link} episodes are missing YouTube links.")
+        print("    Run 'discover-youtube' to try matching them from the playlist.")
 
     if pending > 0:
         cost = estimate_cost(pending)
@@ -94,19 +99,20 @@ def cmd_refresh_index(args):
     merged = merge_episodes(existing, new_episodes)
 
     # Update status
-    downloaded, pending = update_episode_status(merged, TRANSCRIPTS_DIR)
+    downloaded, pending, no_link = update_episode_status(merged, TRANSCRIPTS_DIR)
 
     # Save updated data
     save_episodes(merged, EPISODES_JSON)
     logger.info("Saved %d episodes to %s", len(merged), EPISODES_JSON)
 
     # Generate index
-    index_content = generate_index_markdown(merged, downloaded, pending)
+    index_content = generate_index_markdown(merged, downloaded, pending, no_link)
     save_index(index_content, EPISODE_INDEX)
 
     print(f"\n✅ Updated {len(merged)} episodes")
     print(f"   Downloaded: {downloaded}")
     print(f"   Pending: {pending}")
+    print(f"   Missing YouTube link: {no_link}")
 
     return 0
 
@@ -185,18 +191,18 @@ def cmd_sync(args):
         return 1
 
     # Update status
-    downloaded, pending = update_episode_status(episodes, TRANSCRIPTS_DIR)
+    downloaded, pending, no_link = update_episode_status(episodes, TRANSCRIPTS_DIR)
 
     # Filter to pending episodes with YouTube links
     pending_episodes = [
         ep for ep in episodes
-        if ep.get("status") != "✅ Downloaded" and ep.get("youtube_link")
+        if ep.get("status") == "⬜ Pending" and ep.get("youtube_link")
     ]
 
     if not pending_episodes:
         print("\n✅ All episodes with YouTube links are already downloaded.")
         print(f"   Total downloaded: {downloaded}")
-        print(f"   Missing YouTube link: {pending}")
+        print(f"   Missing YouTube link: {no_link}")
         return 0
 
     # Show cost estimate
@@ -266,11 +272,11 @@ def cmd_sync(args):
         return 1
 
     # Update status and save
-    downloaded, pending = update_episode_status(episodes, TRANSCRIPTS_DIR)
+    downloaded, pending, no_link = update_episode_status(episodes, TRANSCRIPTS_DIR)
     save_episodes(episodes, EPISODES_JSON)
 
     # Regenerate index
-    index_content = generate_index_markdown(episodes, downloaded, pending)
+    index_content = generate_index_markdown(episodes, downloaded, pending, no_link)
     save_index(index_content, EPISODE_INDEX)
 
     # Print summary

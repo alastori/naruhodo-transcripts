@@ -71,27 +71,29 @@ class TestUpdateEpisodeStatus:
 
     def test_matches_by_episode_number(self, transcripts_dir):
         episodes = [
-            {"title": "Naruhodo #1 - First Episode", "episode_number": "1", "status": "⬜ Pending"},
-            {"title": "Naruhodo #999 - Not Downloaded", "episode_number": "999", "status": "⬜ Pending"},
+            {"title": "Naruhodo #1 - First Episode", "episode_number": "1", "status": "⬜ Pending", "youtube_link": "https://youtube.com/1"},
+            {"title": "Naruhodo #999 - Not Downloaded", "episode_number": "999", "status": "⬜ Pending", "youtube_link": "https://youtube.com/999"},
         ]
 
-        downloaded, pending = update_episode_status(episodes, transcripts_dir)
+        downloaded, pending, no_link = update_episode_status(episodes, transcripts_dir)
 
         assert downloaded == 1
         assert pending == 1
+        assert no_link == 0
         assert episodes[0]["status"] == "✅ Downloaded"
         assert episodes[1]["status"] == "⬜ Pending"
 
     def test_matches_interview(self, transcripts_dir):
         episodes = [
-            {"title": "Entrevista #1: Dr. João Silva", "episode_number": "1", "status": "⬜ Pending"},
-            {"title": "Entrevista #99: Not Downloaded", "episode_number": "99", "status": "⬜ Pending"},
+            {"title": "Entrevista #1: Dr. João Silva", "episode_number": "1", "status": "⬜ Pending", "youtube_link": "https://youtube.com/1"},
+            {"title": "Entrevista #99: Not Downloaded", "episode_number": "99", "status": "⬜ Pending", "youtube_link": "https://youtube.com/99"},
         ]
 
-        downloaded, pending = update_episode_status(episodes, transcripts_dir)
+        downloaded, pending, no_link = update_episode_status(episodes, transcripts_dir)
 
         assert downloaded == 1
         assert pending == 1
+        assert no_link == 0
         assert episodes[0]["status"] == "✅ Downloaded"
         assert episodes[1]["status"] == "⬜ Pending"
 
@@ -101,10 +103,10 @@ class TestUpdateEpisodeStatus:
         (transcripts / "001 - Special Episode.pt.vtt").write_text("WEBVTT")
 
         episodes = [
-            {"title": "Special Episode", "episode_number": "", "status": "⬜ Pending"},
+            {"title": "Special Episode", "episode_number": "", "status": "⬜ Pending", "youtube_link": "https://youtube.com/1"},
         ]
 
-        downloaded, pending = update_episode_status(episodes, transcripts)
+        downloaded, pending, no_link = update_episode_status(episodes, transcripts)
 
         assert downloaded == 1
         assert episodes[0]["status"] == "✅ Downloaded"
@@ -116,10 +118,10 @@ class TestUpdateEpisodeStatus:
         (transcripts / "001 - Naruhodo #1 - O que é isso？.pt.vtt").write_text("WEBVTT")
 
         episodes = [
-            {"title": "Naruhodo #1 - O que é isso?", "episode_number": "1", "status": "⬜ Pending"},
+            {"title": "Naruhodo #1 - O que é isso?", "episode_number": "1", "status": "⬜ Pending", "youtube_link": "https://youtube.com/1"},
         ]
 
-        downloaded, pending = update_episode_status(episodes, transcripts)
+        downloaded, pending, no_link = update_episode_status(episodes, transcripts)
 
         assert downloaded == 1
 
@@ -128,14 +130,34 @@ class TestUpdateEpisodeStatus:
         empty_dir.mkdir()
 
         episodes = [
-            {"title": "Episode 1", "episode_number": "1", "status": "✅ Downloaded"},
-            {"title": "Episode 2", "episode_number": "2", "status": "✅ Downloaded"},
+            {"title": "Episode 1", "episode_number": "1", "status": "✅ Downloaded", "youtube_link": "https://youtube.com/1"},
+            {"title": "Episode 2", "episode_number": "2", "status": "✅ Downloaded", "youtube_link": "https://youtube.com/2"},
         ]
 
-        downloaded, pending = update_episode_status(episodes, empty_dir)
+        downloaded, pending, no_link = update_episode_status(episodes, empty_dir)
 
         assert downloaded == 0
         assert pending == 2
+        assert no_link == 0
+
+    def test_no_link_status_when_missing_youtube_link(self, tmp_path):
+        empty_dir = tmp_path / "empty"
+        empty_dir.mkdir()
+
+        episodes = [
+            {"title": "Episode 1", "episode_number": "1", "status": "⬜ Pending", "youtube_link": ""},
+            {"title": "Episode 2", "episode_number": "2", "status": "⬜ Pending", "youtube_link": "https://youtube.com/2"},
+            {"title": "Episode 3", "episode_number": "3", "status": "⬜ Pending"},  # No youtube_link key
+        ]
+
+        downloaded, pending, no_link = update_episode_status(episodes, empty_dir)
+
+        assert downloaded == 0
+        assert pending == 1
+        assert no_link == 2
+        assert episodes[0]["status"] == "🔗 No Link"
+        assert episodes[1]["status"] == "⬜ Pending"
+        assert episodes[2]["status"] == "🔗 No Link"
 
 
 class TestFormatReferences:
@@ -215,20 +237,21 @@ class TestGenerateIndexMarkdown:
     """Tests for generate_index_markdown function."""
 
     def test_includes_header(self, sample_episode):
-        content = generate_index_markdown([sample_episode], 1, 0)
+        content = generate_index_markdown([sample_episode], 1, 0, 0)
         assert "# Naruhodo Podcast - Episode Index" in content
 
     def test_includes_counts(self, sample_episode):
-        content = generate_index_markdown([sample_episode], 1, 5)
+        content = generate_index_markdown([sample_episode], 1, 5, 3)
         assert "Transcripts downloaded: 1" in content
-        assert "Pending: 5" in content
+        assert "Pending (with YouTube link): 5" in content
+        assert "Missing YouTube link: 3" in content
 
     def test_includes_table_header(self, sample_episode):
-        content = generate_index_markdown([sample_episode], 1, 0)
+        content = generate_index_markdown([sample_episode], 1, 0, 0)
         assert "| # | Title | Date |" in content
 
     def test_includes_episode_row(self, sample_episode):
-        content = generate_index_markdown([sample_episode], 1, 0)
+        content = generate_index_markdown([sample_episode], 1, 0, 0)
         assert "400" in content
         assert "Por que gostamos" in content
 
@@ -243,7 +266,7 @@ class TestGenerateIndexMarkdown:
             "status": "⬜ Pending",
             "references": [],
         }
-        content = generate_index_markdown([episode], 0, 1)
+        content = generate_index_markdown([episode], 0, 1, 0)
         assert "\\|" in content
 
 
