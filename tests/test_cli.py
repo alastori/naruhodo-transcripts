@@ -12,7 +12,44 @@ from src.cli import (
     cmd_status,
     cmd_refresh_index,
     cmd_sync,
+    check_disk_space,
 )
+
+
+class TestCheckDiskSpace:
+    """Tests for check_disk_space function."""
+
+    def test_returns_tuple(self):
+        result = check_disk_space(10)
+        assert isinstance(result, tuple)
+        assert len(result) == 3
+
+    def test_has_space_for_small_download(self):
+        has_space, required_mb, available_mb = check_disk_space(10)
+        # 10 files * 100KB = 1MB required - should have space on any system
+        assert has_space is True
+        assert required_mb <= 1
+
+    @patch("src.cli.shutil.disk_usage")
+    def test_warns_when_low_space(self, mock_disk_usage):
+        # Simulate 5MB free space
+        mock_disk_usage.return_value = MagicMock(free=5 * 1024 * 1024)
+
+        # Request 100 files = 10MB required
+        has_space, required_mb, available_mb = check_disk_space(100)
+
+        assert has_space is False
+        assert required_mb == 9  # 100 * 100KB / 1024 ≈ 9MB
+        assert available_mb == 5
+
+    @patch("src.cli.shutil.disk_usage")
+    def test_handles_os_error(self, mock_disk_usage):
+        mock_disk_usage.side_effect = OSError("Permission denied")
+
+        has_space, required_mb, available_mb = check_disk_space(10)
+
+        # Should assume we have space if check fails
+        assert has_space is True
 
 
 class TestMain:

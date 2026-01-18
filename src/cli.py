@@ -2,6 +2,7 @@
 """CLI for Naruhodo podcast transcript downloader."""
 
 import argparse
+import shutil
 import sys
 from datetime import datetime
 
@@ -31,6 +32,32 @@ from .youtube_discovery import (
     fetch_playlist_metadata,
     match_episodes,
 )
+
+# Estimated average VTT file size (based on typical transcript length)
+ESTIMATED_VTT_SIZE_KB = 100  # ~100KB per transcript file
+
+
+def check_disk_space(num_files: int) -> tuple[bool, int, int]:
+    """Check if there's enough disk space for downloads.
+
+    Args:
+        num_files: Number of files to download
+
+    Returns:
+        Tuple of (has_space, required_mb, available_mb)
+    """
+    required_kb = num_files * ESTIMATED_VTT_SIZE_KB
+    required_mb = required_kb // 1024
+
+    try:
+        disk_usage = shutil.disk_usage(TRANSCRIPTS_DIR.parent)
+        available_mb = disk_usage.free // (1024 * 1024)
+        has_space = available_mb >= required_mb
+    except OSError:
+        # If we can't check, assume we have space
+        return True, required_mb, 0
+
+    return has_space, required_mb, available_mb
 
 
 def print_banner():
@@ -223,6 +250,14 @@ def cmd_sync(args):
     print("\n⚠️  YouTube may rate-limit after ~60 requests.")
     print("    The script will automatically retry with exponential backoff.")
     print("    You can safely Ctrl+C and resume later - progress is saved.")
+
+    # Check disk space
+    has_space, required_mb, available_mb = check_disk_space(len(pending_episodes))
+    if not has_space:
+        print(f"\n⚠️  Low disk space warning:")
+        print(f"    Required:  ~{required_mb} MB")
+        print(f"    Available: ~{available_mb} MB")
+        print("    Downloads may fail if disk fills up.")
 
     # Ask for confirmation unless --yes
     if not args.yes:
