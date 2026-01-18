@@ -92,12 +92,15 @@ def update_episode_status(
             if title in downloaded_titles or normalized_title in downloaded_titles:
                 is_downloaded = True
             else:
-                # Partial match on episode identifier
+                # Partial match on episode identifier (e.g., "Naruhodo Extra")
+                # Only for episodes without a number (to avoid #45 matching #450)
                 title_parts = title.split(" - ")
-                if len(title_parts) > 1:
+                if len(title_parts) > 1 and not ep_num:
                     ep_identifier = title_parts[0]
                     for dt in downloaded_titles:
-                        if ep_identifier.replace(":", "：") in dt or ep_identifier in dt:
+                        # Match identifier at start, followed by separator
+                        normalized_identifier = ep_identifier.replace(":", "：")
+                        if dt.startswith(ep_identifier + " -") or dt.startswith(normalized_identifier + " -"):
                             is_downloaded = True
                             break
 
