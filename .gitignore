@@ -1,0 +1,65 @@
+# Transcripts (users download their own)
+transcripts/
+*.vtt
+
+# Temporary files and logs
+temp/
+logs/
+*.log
+download_log*.txt
+
+# Python
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Project specific
+rss_feed.xml
+PROGRESS.md
+
+# uv
+.uv/
+uv.lock
+
+# Claude Code local settings
+.claude/
