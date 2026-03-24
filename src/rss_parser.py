@@ -6,12 +6,13 @@ import os
 import re
 import tempfile
 import time
-import xml.etree.ElementTree as ET
 from datetime import datetime
 from html import unescape
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
+
+import defusedxml.ElementTree as ET
 
 import requests
 
@@ -34,6 +35,7 @@ _RE_INTERVIEW_GUEST = re.compile(r"Entrevista\s*#\d+[:\s]+(.+?)$")
 # URL pattern: allows parentheses in URLs (for Wikipedia, Lancet DOIs, etc.)
 _RE_URL = re.compile(r"https?://[^\s<>\"'\]]+")
 _RE_URL_TRAILING_PUNCT = re.compile(r"[.,;:!?\"'\]]+$")
+_RE_TRACKING_PARAMS = re.compile(r"[?&]casa_token=[^&]*")
 _RE_DOI = re.compile(r"10\.\d{4,}/[^\s]+")
 _RE_PMID = re.compile(r"/pubmed/(\d+)")
 
@@ -271,13 +273,23 @@ def _is_naruhodo_self_reference(url: str) -> bool:
 
 
 def _clean_extracted_url(url: str) -> str:
-    """Clean extracted URL: strip trailing punctuation and balance parentheses."""
+    """Clean extracted URL: strip trailing punctuation, balance parens, remove tracking params."""
     url = _RE_URL_TRAILING_PUNCT.sub("", url)
     # Balance parentheses: strip trailing ) without matching (
     while url.endswith(")") and url.count("(") < url.count(")"):
         url = url[:-1]
     # Strip any remaining trailing punctuation after paren balancing
     url = _RE_URL_TRAILING_PUNCT.sub("", url)
+    # Strip session/tracking parameters (e.g., casa_token from academic publishers)
+    url = _strip_tracking_params(url)
+    return url
+
+
+def _strip_tracking_params(url: str) -> str:
+    """Strip tracking/session parameters from URLs."""
+    url = _RE_TRACKING_PARAMS.sub("", url)
+    url = url.replace("?&", "?")  # Fix orphaned &
+    url = url.rstrip("?")  # Remove trailing ? if no params left
     return url
 
 
