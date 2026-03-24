@@ -61,7 +61,21 @@ Some episodes (~47) don't have YouTube links. For these — or for higher-qualit
 ```bash
 # Apple Silicon Mac required (M1/M2/M3/M4)
 brew install ffmpeg
-uv sync --extra whisper
+uv sync --extra diarize   # includes Whisper + speaker diarization
+```
+
+Speaker diarization (labeling who says what) is on by default. It requires:
+
+1. **HuggingFace token** — accept gated model terms (free, one-time):
+   - https://huggingface.co/pyannote/speaker-diarization-3.1
+   - https://huggingface.co/pyannote/segmentation-3.0
+2. **Ollama** running locally with a model:
+   ```bash
+   ollama pull qwen2.5:72b-instruct-q4_K_M
+   ```
+
+```bash
+export HF_TOKEN="hf_your_token_here"
 ```
 
 ### Usage
@@ -78,33 +92,12 @@ uv run naruhodo whisper --limit 10 --yes
 
 # Transcribe all missing episodes
 uv run naruhodo whisper --yes
+
+# Skip diarization (transcription only, no speaker labels)
+uv run naruhodo whisper --no-diarize --yes
 ```
 
-Whisper transcripts are saved as `.whisper.md` files in `data/transcripts/` and are automatically recognized by `naruhodo status`.
-
-### Speaker Diarization (Optional)
-
-Add speaker labels (Ken Fujioka vs Altay de Souza) using [pyannote](https://github.com/pyannote/pyannote-audio) for speaker detection and [Ollama](https://ollama.com) for speaker identification:
-
-```bash
-# Install diarization dependencies
-uv sync --extra diarize
-
-# Accept gated model terms (free, one-time):
-#   https://huggingface.co/pyannote/speaker-diarization-3.1
-#   https://huggingface.co/pyannote/segmentation-3.0
-
-# Set your HuggingFace token
-export HF_TOKEN="hf_your_token_here"
-
-# Pull an Ollama model for speaker identification
-ollama pull qwen2.5:72b-instruct-q4_K_M
-
-# Transcribe with diarization
-uv run naruhodo whisper --diarize --episode 9 --yes
-```
-
-The output labels each paragraph with the speaker name:
+Transcripts are saved as `.whisper.md` in `data/transcripts/` with speaker labels:
 
 ```markdown
 **Altay de Souza:** Neste episódio vamos falar sobre...
@@ -122,8 +115,8 @@ The output labels each paragraph with the speaker name:
 | `naruhodo refresh-index` | Refresh episode metadata from RSS feed |
 | `naruhodo discover-youtube` | Match YouTube playlist videos to RSS episodes |
 | `naruhodo sync` | Download YouTube auto-captions (fast, default) |
-| `naruhodo whisper` | Transcribe locally with MLX Whisper (high quality) |
-| `naruhodo whisper --diarize` | Transcribe with speaker labels |
+| `naruhodo whisper` | Transcribe locally with speaker labels (MLX Whisper + pyannote) |
+| `naruhodo whisper --no-diarize` | Transcribe without speaker labels |
 
 Use `-v` before the subcommand for verbose output. Most commands accept `--help` for details.
 

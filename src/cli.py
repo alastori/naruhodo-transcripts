@@ -352,7 +352,7 @@ def cmd_whisper(args):
 
     # Load diarization pipeline early if requested (fail fast)
     diarization_pipeline = None
-    if args.diarize:
+    if not args.no_diarize:
         print("Loading diarization pipeline...")
         diarization_pipeline = wh.load_diarization_pipeline()
         if diarization_pipeline is None:
@@ -391,7 +391,7 @@ def cmd_whisper(args):
     print(f"  Episodes to transcribe:  {len(missing)}")
     print(f"  Total audio:             {wh.format_duration(total_audio)}")
     print(f"  Model:                   {args.model}")
-    print(f"  Diarization:             {'yes (pyannote + Ollama)' if args.diarize else 'no'}")
+    print(f"  Diarization:             {'yes (pyannote + Ollama)' if not args.no_diarize else 'no'}")
     print(f"  Est. transcription time: ~{wh.format_duration(est_time)}")
     print(f"  Est. download size:      ~{total_audio / 60:.0f} MB")
     print()
@@ -470,7 +470,7 @@ def cmd_whisper(args):
             continue
 
         # Diarize if requested
-        if args.diarize and diarization_pipeline and output_path.exists():
+        if not args.no_diarize and diarization_pipeline and output_path.exists():
             print(f"    Diarizing...")
             t1 = time.monotonic()
             try:
@@ -502,7 +502,7 @@ def cmd_whisper(args):
     print(f"\n{'='*50}")
     print(f"Transcription complete in {wh.format_duration(total_time)}")
     print(f"  Success:   {results['success']}")
-    if args.diarize:
+    if not args.no_diarize:
         print(f"  Diarized:  {results['diarized']}")
     print(f"  Failed:    {results['failed']}")
 
@@ -594,8 +594,8 @@ def main():
         help="Whisper model (default: large-v3)",
     )
     whisper_parser.add_argument(
-        "--diarize", action="store_true",
-        help="Add speaker diarization (requires pyannote + Ollama)",
+        "--no-diarize", action="store_true",
+        help="Skip speaker diarization",
     )
     whisper_parser.add_argument(
         "--ollama-model", type=str, default="qwen2.5:72b-instruct-q4_K_M",
