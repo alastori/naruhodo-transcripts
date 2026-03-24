@@ -266,13 +266,14 @@ class TestExtractReferences:
         assert "https://example.com" in refs
         assert "https://other.org" in refs
 
-    def test_filters_short_naruhodo_urls(self):
-        desc = "Visit https://naruhodo.b9.com.br and https://naruhodo.b9.com.br/episode-400"
+    def test_filters_naruhodo_self_references(self):
+        desc = "Visit https://naruhodo.b9.com.br and https://naruhodo.b9.com.br/episode-400 and https://doi.org/paper1"
         refs = extract_references(desc)
-        # Short naruhodo URL should be filtered
+        # All naruhodo.b9.com.br URLs are self-references, filtered from flat list
         assert "https://naruhodo.b9.com.br" not in refs
-        # Long naruhodo URL should be kept
-        assert "https://naruhodo.b9.com.br/episode-400" in refs
+        assert "https://naruhodo.b9.com.br/episode-400" not in refs
+        # External references are kept
+        assert "https://doi.org/paper1" in refs
 
     def test_multiple_references(self):
         desc = """
@@ -444,7 +445,7 @@ class TestMergeEpisodes:
 
     def test_handles_empty_new(self, sample_episode):
         merged = merge_episodes([sample_episode], [])
-        assert len(merged) == 0  # New list determines output
+        assert len(merged) == 1  # Existing episodes preserved when not in new feed
 
     def test_updates_other_fields(self, sample_episode):
         existing = [sample_episode.copy()]
@@ -535,13 +536,36 @@ class TestFetchRssFeed:
         assert mock_get.call_count == 3  # RSS_MAX_RETRIES
 
     @patch("src.rss_parser.requests.get")
-    def test_does_not_retry_http_errors(self, mock_get):
-        # HTTP errors (4xx, 5xx) should not trigger retries
+    def test_does_not_retry_client_errors(self, mock_get):
+        # Client errors (4xx) should not trigger retries
         mock_response = MagicMock()
-        mock_response.raise_for_status.side_effect = requests.HTTPError("404 Not Found")
+        mock_response.status_code = 404
+        http_error = requests.HTTPError("404 Not Found", response=mock_response)
+        mock_response.raise_for_status.side_effect = http_error
         mock_get.return_value = mock_response
 
         with pytest.raises(requests.HTTPError):
             fetch_rss_feed("https://example.com/feed")
 
-        mock_get.assert_called_once()  # No retries
+        mock_get.assert_called_once()  # No retries for 4xx
+
+    @patch("src.rss_parser.time.sleep")
+    @patch("src.rss_parser.requests.get")
+    def test_retries_server_errors(self, mock_get, mock_sleep):
+        # Server errors (5xx) should trigger retries
+        mock_error_response = MagicMock()
+        mock_error_response.status_code = 500
+        http_error = requests.HTTPError("500 Internal Server Error", response=mock_error_response)
+
+        mock_success_response = MagicMock()
+        mock_success_response.text = "<rss>recovered</rss>"
+
+        mock_get.side_effect = [
+            MagicMock(raise_for_status=MagicMock(side_effect=http_error)),
+            mock_success_response,
+        ]
+
+        result = fetch_rss_feed("https://example.com/feed")
+
+        assert result == "<rss>recovered</rss>"
+        assert mock_get.call_count == 2

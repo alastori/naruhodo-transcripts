@@ -176,6 +176,11 @@ def cmd_discover_youtube(args):
     save_episodes(episodes, EPISODES_JSON)
     logger.info("Saved %d episodes to %s", len(episodes), EPISODES_JSON)
 
+    # Regenerate index with updated links
+    downloaded, pending, no_link = update_episode_status(episodes, TRANSCRIPTS_DIR)
+    index_content = generate_index_markdown(episodes, downloaded, pending, no_link)
+    save_index(index_content, EPISODE_INDEX)
+
     # Print summary
     print(f"\n✅ YouTube discovery complete")
     print(f"\nSummary:")

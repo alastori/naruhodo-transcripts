@@ -109,7 +109,7 @@ class TestTranscriptDownloaderExtractVideoId:
 
     def test_embed_url(self, downloader):
         url = "https://www.youtube.com/embed/abc123def45"
-        assert downloader.extract_video_id(url) is None  # /embed/ not in pattern
+        assert downloader.extract_video_id(url) == "abc123def45"
 
     def test_v_url(self, downloader):
         url = "https://www.youtube.com/v/abc123def45"

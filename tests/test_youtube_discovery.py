@@ -9,10 +9,10 @@ from src.youtube_discovery import (
     YouTubeVideo,
     parse_youtube_title,
     get_episode_key,
-    get_episode_type_from_title,
     fetch_playlist_metadata,
     match_episodes,
 )
+from src.rss_parser import extract_episode_type
 
 
 class TestParseYoutubeTitle:
@@ -42,13 +42,13 @@ class TestParseYoutubeTitle:
         title = "Naruhodo Extra#5 - Bonus"
         assert parse_youtube_title(title) == ("extra", "5")
 
-    def test_unknown_format(self):
+    def test_other_format(self):
         title = "Some other video title"
-        assert parse_youtube_title(title) == ("unknown", "")
+        assert parse_youtube_title(title) == ("other", "")
 
     def test_naruhodo_without_number(self):
         title = "Naruhodo - Special Episode"
-        assert parse_youtube_title(title) == ("unknown", "")
+        assert parse_youtube_title(title) == ("other", "")
 
     def test_case_insensitive(self):
         title = "NARUHODO #100 - Test"
@@ -74,6 +74,9 @@ class TestGetEpisodeKey:
     def test_unknown_type_no_key(self):
         assert get_episode_key("unknown", "123") == ""
 
+    def test_other_type_no_key(self):
+        assert get_episode_key("other", "123") == ""
+
     def test_empty_number_no_key(self):
         assert get_episode_key("regular", "") == ""
 
@@ -81,24 +84,20 @@ class TestGetEpisodeKey:
         assert get_episode_key("regular", None) == ""
 
 
-class TestGetEpisodeTypeFromTitle:
-    """Tests for get_episode_type_from_title function."""
+class TestExtractEpisodeType:
+    """Tests for extract_episode_type (canonical, from rss_parser)."""
 
     def test_regular_episode(self):
-        title = "Naruhodo #457 - Test"
-        assert get_episode_type_from_title(title) == "regular"
+        assert extract_episode_type("Naruhodo #457 - Test") == "regular"
 
     def test_interview_episode(self):
-        title = "Naruhodo Entrevista #58: Guest"
-        assert get_episode_type_from_title(title) == "interview"
+        assert extract_episode_type("Naruhodo Entrevista #58: Guest") == "interview"
 
     def test_extra_episode(self):
-        title = "Naruhodo Extra #10 - Bonus"
-        assert get_episode_type_from_title(title) == "extra"
+        assert extract_episode_type("Naruhodo Extra #10 - Bonus") == "extra"
 
-    def test_unknown_episode(self):
-        title = "Some other title"
-        assert get_episode_type_from_title(title) == "unknown"
+    def test_other_episode(self):
+        assert extract_episode_type("Some other title") == "other"
 
 
 class TestFetchPlaylistMetadata:
@@ -237,12 +236,12 @@ class TestMatchEpisodes:
         assert stats["youtube_unmatched"] == 1
         assert "N200" in stats["youtube_unmatched_keys"]
 
-    def test_handles_unknown_types(self):
+    def test_handles_other_types(self):
         episodes = [
             {"title": "Some Special Episode", "episode_number": "", "youtube_link": ""},
         ]
         youtube_videos = [
-            YouTubeVideo("abc", "Some Other Video", "https://yt/abc", "unknown", ""),
+            YouTubeVideo("abc", "Some Other Video", "https://yt/abc", "other", ""),
         ]
 
         updated, stats = match_episodes(episodes, youtube_videos)

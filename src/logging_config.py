@@ -16,7 +16,8 @@ def format_duration(seconds: float) -> str:
     if seconds >= 3600:
         hours = seconds // 3600
         minutes = (seconds % 3600) // 60
-        return f"{hours}:{minutes:02d}:00"
+        secs = seconds % 60
+        return f"{hours}:{minutes:02d}:{secs:02d}"
     else:
         minutes = seconds // 60
         secs = seconds % 60
@@ -111,8 +112,10 @@ def configure_logging(
     logger = logging.getLogger("naruhodo")
     logger.setLevel(logging.DEBUG)
 
-    # Clear any existing handlers
-    logger.handlers.clear()
+    # Close and remove existing handlers to avoid leaking file descriptors
+    for handler in logger.handlers[:]:
+        handler.close()
+        logger.removeHandler(handler)
 
     # Console handler
     console_handler = logging.StreamHandler(sys.stdout)

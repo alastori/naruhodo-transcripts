@@ -18,6 +18,9 @@ from .logging_config import ProgressLogger
 
 logger = logging.getLogger("naruhodo")
 
+_RE_EPISODE_NUMBER = re.compile(r"#(\d+)")
+_RE_UNSAFE_CHARS = re.compile(r'[<>"/\\|*]')
+
 
 @dataclass
 class RetryConfig:
@@ -40,6 +43,7 @@ class DownloadResult:
     error: Optional[str] = None
     no_subtitles: bool = False
     rate_limited: bool = False
+    wait_time: float = 0.0  # Total time spent sleeping for retries/rate limits
 
 
 class TranscriptDownloader:
@@ -55,11 +59,23 @@ class TranscriptDownloader:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.retry_config = retry_config or RetryConfig()
         self.language = language
+        self._vtt_name_cache: Optional[list[str]] = None
+
+    def _get_vtt_names(self) -> list[str]:
+        """Get cached list of VTT filenames in the output directory."""
+        if self._vtt_name_cache is None:
+            try:
+                self._vtt_name_cache = [
+                    f.name for f in self.output_dir.iterdir() if f.suffix == ".vtt"
+                ]
+            except OSError:
+                self._vtt_name_cache = []
+        return self._vtt_name_cache
 
     def extract_video_id(self, url: str) -> Optional[str]:
         """Extract video ID from YouTube URL."""
         patterns = [
-            r"(?:v=|/v/|youtu\.be/)([a-zA-Z0-9_-]{11})",
+            r"(?:v=|/v/|youtu\.be/|/embed/)([a-zA-Z0-9_-]{11})",
             r"^([a-zA-Z0-9_-]{11})$",
         ]
         for pattern in patterns:
@@ -68,13 +84,43 @@ class TranscriptDownloader:
                 return match.group(1)
         return None
 
+    @staticmethod
+    def _sanitize_title(title: str) -> str:
+        """Sanitize title for use in filenames, replacing special chars with fullwidth."""
+        safe = title.replace(":", "\uff1a").replace("?", "\uff1f")
+        safe = _RE_UNSAFE_CHARS.sub("", safe)
+        return safe[:100]
+
     def get_output_filename(self, video_id: str, title: str, index: int) -> str:
-        """Generate output filename for transcript."""
-        # Sanitize title for filesystem
-        safe_title = re.sub(r'[<>:"/\\|?*]', "", title)
-        safe_title = safe_title.replace(":", "：").replace("?", "？")
-        safe_title = safe_title[:100]  # Limit length
-        return f"{index:03d} - {safe_title}.{self.language}.vtt"
+        """Generate output filename for transcript.
+
+        Uses episode number from title for stable prefix across sync runs.
+        Falls back to sequential index for titles without episode numbers.
+        """
+        safe_title = self._sanitize_title(title)
+        # Use episode number for stable, deterministic prefix
+        num_match = _RE_EPISODE_NUMBER.search(title)
+        prefix = f"{int(num_match.group(1)):03d}" if num_match else f"{index:03d}"
+        return f"{prefix} - {safe_title}.{self.language}.vtt"
+
+    def _find_existing_transcript(self, title: str) -> Optional[Path]:
+        """Check if a transcript for this title already exists, regardless of naming scheme.
+
+        Uses cached directory listing to avoid O(n*m) filesystem scans during sync.
+        """
+        safe_title = self._sanitize_title(title)
+        # Also match files from old code that stripped : and ? entirely
+        old_safe_title = re.sub(r'[<>:"/\\|?*]', "", title)[:100]
+
+        search_parts = [f" - {safe_title}."]
+        if old_safe_title != safe_title:
+            search_parts.append(f" - {old_safe_title}.")
+
+        for name in self._get_vtt_names():
+            for search_part in search_parts:
+                if search_part in name:
+                    return self.output_dir / name
+        return None
 
     def download_transcript(
         self,
@@ -94,23 +140,33 @@ class TranscriptDownloader:
         output_filename = self.get_output_filename(video_id, title, index)
         output_path = self.output_dir / output_filename
 
-        # Check if already downloaded
-        if output_path.exists():
-            logger.debug("Already downloaded: %s", output_filename)
+        # Check if already downloaded (exact path or title-based fallback for old naming)
+        existing = output_path if output_path.exists() else self._find_existing_transcript(title)
+        if existing:
+            logger.debug("Already downloaded: %s", existing.name)
             return DownloadResult(
                 success=True,
                 video_id=video_id,
-                output_path=output_path,
+                output_path=existing,
             )
 
         # Try to download with retry
         delay = self.retry_config.initial_delay
         last_error = None
+        total_wait = 0.0
 
         for attempt in range(self.retry_config.max_retries):
             result = self._attempt_download(video_url, video_id, output_path)
 
-            if result.success or result.no_subtitles:
+            if result.success:
+                result.wait_time = total_wait
+                # Update cache with newly created file
+                if result.output_path and self._vtt_name_cache is not None:
+                    self._vtt_name_cache.append(result.output_path.name)
+                return result
+
+            if result.no_subtitles:
+                result.wait_time = total_wait
                 return result
 
             if result.rate_limited:
@@ -121,6 +177,7 @@ class TranscriptDownloader:
                     int(wait_time),
                 )
                 time.sleep(wait_time)
+                total_wait += wait_time
                 last_error = result.error
             else:
                 # Regular error - exponential backoff
@@ -134,13 +191,18 @@ class TranscriptDownloader:
                         int(delay),
                     )
                     time.sleep(delay)
-                    delay = min(delay * self.retry_config.backoff_factor, self.retry_config.max_delay)
+                    total_wait += delay
+                    delay = min(
+                        delay * self.retry_config.backoff_factor,
+                        self.retry_config.max_delay,
+                    )
                 last_error = result.error
 
         return DownloadResult(
             success=False,
             video_id=video_id,
             error=f"Max retries exceeded. Last error: {last_error}",
+            wait_time=total_wait,
         )
 
     def _attempt_download(
@@ -156,7 +218,7 @@ class TranscriptDownloader:
             "--write-auto-sub",
             "--sub-lang", self.language,
             "--sub-format", "vtt",
-            "--output", str(output_path.with_suffix("")),
+            "--output", str(output_path.with_suffix("").with_suffix("")),
             "--no-warnings",
             "--quiet",
             video_url,
@@ -191,11 +253,12 @@ class TranscriptDownloader:
                 )
 
             # Check if file was created
-            # yt-dlp adds language suffix, so check for the file
             expected_file = output_path
             if not expected_file.exists():
                 # Try without the language in the middle (yt-dlp format variations)
-                possible_files = list(self.output_dir.glob(f"{output_path.stem}*{self.language}*.vtt"))
+                possible_files = list(self.output_dir.glob(
+                    f"{output_path.stem}*{self.language}*.vtt"
+                ))
                 if possible_files:
                     expected_file = possible_files[0]
 
@@ -229,14 +292,7 @@ class TranscriptDownloader:
 
 
 def estimate_cost(pending: int) -> dict:
-    """Estimate time and resources for downloading pending episodes.
-
-    Args:
-        pending: Number of episodes to download
-
-    Returns:
-        Dictionary with cost estimates
-    """
+    """Estimate time and resources for downloading pending episodes."""
     download_time = pending * SECONDS_PER_DOWNLOAD
     rate_limits = pending // DOWNLOADS_PER_RATE_LIMIT
     wait_time = rate_limits * RATE_LIMIT_WAIT_SECONDS
@@ -246,7 +302,7 @@ def estimate_cost(pending: int) -> dict:
         "requests": pending,
         "download_minutes": download_time // 60,
         "rate_limits": rate_limits,
-        "wait_hours": rate_limits,  # 1 hour per rate limit
+        "wait_hours": rate_limits,
         "total_hours": round(total_seconds / 3600, 1),
     }
 
@@ -257,17 +313,7 @@ def sync_transcripts(
     progress_logger: Optional[ProgressLogger] = None,
     retry_config: Optional[RetryConfig] = None,
 ) -> dict:
-    """Sync transcripts for all episodes.
-
-    Args:
-        episodes: List of episode dictionaries with youtube_link
-        output_dir: Directory to save transcripts
-        progress_logger: Optional progress logger
-        retry_config: Optional retry configuration
-
-    Returns:
-        Dictionary with sync results
-    """
+    """Sync transcripts for all episodes."""
     downloader = TranscriptDownloader(output_dir, retry_config)
 
     results = {
@@ -301,6 +347,8 @@ def sync_transcripts(
             })
 
         if progress_logger:
+            if result.wait_time > 0:
+                progress_logger.add_pause_time(result.wait_time)
             progress_logger.update(i)
 
     if progress_logger:

@@ -6,6 +6,8 @@ import re
 import subprocess
 from dataclasses import dataclass
 
+from .rss_parser import extract_episode_type
+
 logger = logging.getLogger("naruhodo")
 
 
@@ -15,7 +17,7 @@ class YouTubeVideo:
     video_id: str
     title: str
     url: str
-    episode_type: str  # "regular", "interview", "extra", "unknown"
+    episode_type: str  # "regular", "interview", "extra", "other"
     episode_number: str
 
 
@@ -27,7 +29,7 @@ def parse_youtube_title(title: str) -> tuple[str, str]:
 
     Returns:
         Tuple of (episode_type, episode_number)
-        - episode_type: "regular", "interview", "extra", or "unknown"
+        - episode_type: "regular", "interview", "extra", or "other"
         - episode_number: The episode number as string, or ""
 
     Examples:
@@ -50,14 +52,14 @@ def parse_youtube_title(title: str) -> tuple[str, str]:
     if match:
         return ("regular", match.group(1))
 
-    return ("unknown", "")
+    return ("other", "")
 
 
 def get_episode_key(episode_type: str, episode_number: str) -> str:
     """Generate a unique key for an episode based on type and number.
 
     Args:
-        episode_type: "regular", "interview", "extra", or "unknown"
+        episode_type: "regular", "interview", "extra", or "other"
         episode_number: The episode number
 
     Returns:
@@ -73,24 +75,6 @@ def get_episode_key(episode_type: str, episode_number: str) -> str:
     }
     prefix = type_prefix.get(episode_type, "")
     return f"{prefix}{episode_number}" if prefix else ""
-
-
-def get_episode_type_from_title(title: str) -> str:
-    """Determine episode type from RSS episode title.
-
-    Args:
-        title: Episode title from RSS feed
-
-    Returns:
-        Episode type: "regular", "interview", "extra", or "unknown"
-    """
-    if "Entrevista" in title:
-        return "interview"
-    if "Extra" in title:
-        return "extra"
-    if re.search(r"Naruhodo\s*#\d+", title, re.IGNORECASE):
-        return "regular"
-    return "unknown"
 
 
 def fetch_playlist_metadata(playlist_url: str) -> list[YouTubeVideo]:
@@ -170,10 +154,10 @@ def match_episodes(
         - updated_episodes: Episodes list with youtube_link populated
         - stats: Dictionary with matching statistics
     """
-    # Build lookup from RSS episodes
+    # Build lookup from RSS episodes using canonical extract_episode_type
     rss_by_key: dict[str, dict] = {}
     for ep in episodes:
-        ep_type = get_episode_type_from_title(ep.get("title", ""))
+        ep_type = extract_episode_type(ep.get("title", ""))
         ep_num = ep.get("episode_number", "")
         key = get_episode_key(ep_type, ep_num)
         if key:
@@ -205,11 +189,11 @@ def match_episodes(
     rss_unmatched = set(rss_by_key.keys()) - set(yt_by_key.keys())
     yt_unmatched = set(yt_by_key.keys()) - set(rss_by_key.keys())
 
-    # Count episodes without keys (unknown type)
+    # Count episodes without keys (other type)
     rss_no_key = sum(
         1 for ep in episodes
         if not get_episode_key(
-            get_episode_type_from_title(ep.get("title", "")),
+            extract_episode_type(ep.get("title", "")),
             ep.get("episode_number", ""),
         )
     )

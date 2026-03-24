@@ -38,7 +38,7 @@ class TestFormatDuration:
 
     def test_complex_duration(self):
         # 1 hour, 23 minutes, 45 seconds = 5025 seconds
-        assert format_duration(5025) == "1:23:00"  # Rounds down
+        assert format_duration(5025) == "1:23:45"
 
     def test_float_input(self):
         assert format_duration(90.7) == "1:30"

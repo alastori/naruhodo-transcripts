@@ -3,8 +3,10 @@
 import logging
 import os
 import re
+import tempfile
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 logger = logging.getLogger("naruhodo")
 
@@ -24,9 +26,10 @@ def get_downloaded_episodes(transcripts_dir: Path) -> tuple[set[str], set[str]]:
     if not transcripts_dir.exists():
         return downloaded_numbers, downloaded_titles
 
-    for filename in os.listdir(transcripts_dir):
-        if not filename.endswith(".vtt"):
+    for f in transcripts_dir.iterdir():
+        if f.suffix != ".vtt":
             continue
+        filename = f.name
 
         # Extract regular episode number (Naruhodo #XXX)
         match = re.search(r"Naruhodo\s+#(\d+)", filename)
@@ -38,11 +41,16 @@ def get_downloaded_episodes(transcripts_dir: Path) -> tuple[set[str], set[str]]:
         if match:
             downloaded_numbers.add(f"E{match.group(1)}")
 
+        # Extract extra episode number (Extra #XX)
+        match = re.search(r"Extra\s+#(\d+)", filename)
+        if match:
+            downloaded_numbers.add(f"X{match.group(1)}")
+
         # Store normalized title for fallback matching
         title_match = re.match(r"\d+ - (.+)\.[a-z]{2}\.vtt$", filename)
         if title_match:
             title = title_match.group(1)
-            title = title.replace("：", ":").replace("？", "?").replace("！", "!")
+            title = title.replace("\uff1a", ":").replace("\uff1f", "?").replace("\uff01", "!")
             downloaded_titles.add(title)
 
     return downloaded_numbers, downloaded_titles
@@ -64,8 +72,7 @@ def update_episode_status(
     downloaded_numbers, downloaded_titles = get_downloaded_episodes(transcripts_dir)
 
     logger.debug(
-        "Found %d VTT files, %d unique episode identifiers",
-        sum(1 for f in transcripts_dir.glob("*.vtt")) if transcripts_dir.exists() else 0,
+        "Found %d unique episode identifiers from VTT files",
         len(downloaded_numbers),
     )
 
@@ -79,9 +86,12 @@ def update_episode_status(
 
         is_downloaded = False
 
-        # Check by episode number (most reliable)
+        # Check by episode number and type (most reliable)
         if "Entrevista" in title and ep_num:
             if f"E{ep_num}" in downloaded_numbers:
+                is_downloaded = True
+        elif "Extra" in title and ep_num:
+            if f"X{ep_num}" in downloaded_numbers:
                 is_downloaded = True
         elif ep_num:
             if f"N{ep_num}" in downloaded_numbers:
@@ -89,7 +99,7 @@ def update_episode_status(
 
         # Fallback to title matching
         if not is_downloaded:
-            normalized_title = title.replace(":", "：").replace("?", "？").replace("!", "！")
+            normalized_title = title.replace(":", "\uff1a").replace("?", "\uff1f").replace("!", "\uff01")
             if title in downloaded_titles or normalized_title in downloaded_titles:
                 is_downloaded = True
             else:
@@ -99,20 +109,21 @@ def update_episode_status(
                 if len(title_parts) > 1 and not ep_num:
                     ep_identifier = title_parts[0]
                     for dt in downloaded_titles:
-                        # Match identifier at start, followed by separator
-                        normalized_identifier = ep_identifier.replace(":", "：")
-                        if dt.startswith(ep_identifier + " -") or dt.startswith(normalized_identifier + " -"):
+                        normalized_identifier = ep_identifier.replace(":", "\uff1a")
+                        if dt.startswith(ep_identifier + " -") or dt.startswith(
+                            normalized_identifier + " -"
+                        ):
                             is_downloaded = True
                             break
 
         if is_downloaded:
-            ep["status"] = "✅ Downloaded"
+            ep["status"] = "\u2705 Downloaded"
             downloaded_count += 1
         elif not ep.get("youtube_link"):
-            ep["status"] = "🔗 No Link"
+            ep["status"] = "\U0001f517 No Link"
             no_link_count += 1
         else:
-            ep["status"] = "⬜ Pending"
+            ep["status"] = "\u2b1c Pending"
             pending_count += 1
 
     return downloaded_count, pending_count, no_link_count
@@ -124,17 +135,7 @@ def generate_index_markdown(
     pending_count: int,
     no_link_count: int = 0,
 ) -> str:
-    """Generate markdown index content.
-
-    Args:
-        episodes: List of episode dictionaries
-        downloaded_count: Number of downloaded episodes
-        pending_count: Number of pending episodes
-        no_link_count: Number of episodes without YouTube link
-
-    Returns:
-        Markdown content as string
-    """
+    """Generate markdown index content."""
     lines = [
         "# Naruhodo Podcast - Episode Index",
         "",
@@ -158,11 +159,12 @@ def generate_index_markdown(
         duration = ep.get("duration", "")
         guest = ep.get("guest", "").replace("|", "\\|")
         summary = ep.get("summary", "").replace("|", "\\|")
-        status = ep.get("status", "⬜ Pending")
+        status = ep.get("status", "\u2b1c Pending")
 
-        # Format references as markdown links
+        # Prefer structured references when available
+        structured_refs = ep.get("structured_references")
         refs = ep.get("references", [])
-        refs_md = format_references(refs)
+        refs_md = format_references(refs, structured_refs=structured_refs)
 
         row = f"| {num} | {title} | {date} | {duration} | {guest} | {summary} | {refs_md} | {status} |"
         lines.append(row)
@@ -170,26 +172,47 @@ def generate_index_markdown(
     return "\n".join(lines)
 
 
-def format_references(refs: list[str], max_refs: int = 5) -> str:
+def format_references(
+    refs: list[str],
+    max_refs: int = 5,
+    structured_refs: Optional[list[dict]] = None,
+) -> str:
     """Format reference URLs as markdown links.
 
-    Args:
-        refs: List of reference URLs
-        max_refs: Maximum number of references to include
-
-    Returns:
-        Markdown formatted references
+    Uses structured_references labels when available, falling back to
+    URL-based heuristics for backward compatibility.
     """
+    # Use structured references if available
+    if structured_refs:
+        ref_links = []
+        paper_count = 0
+        ref_count = 0
+        for sr in structured_refs[:max_refs]:
+            label = sr.get("label", "Ref")
+            # Number duplicate labels
+            if label == "Paper":
+                paper_count += 1
+                if paper_count > 1:
+                    label = f"Paper{paper_count}"
+            elif label == "Ref":
+                ref_count += 1
+                label = f"Ref{ref_count}"
+            ref_links.append(f"[{label}]({sr['url']})")
+        return " ".join(ref_links)
+
+    # Fallback: derive labels from URLs
     if not refs:
         return ""
 
     ref_links = []
-    for i, ref in enumerate(refs[:max_refs]):
-        # Create a short label based on domain
+    paper_count = 0
+    ref_count = 0
+    for ref in refs[:max_refs]:
         if "lattes.cnpq" in ref:
             label = "Lattes"
         elif "doi.org" in ref or "pubmed" in ref.lower():
-            label = f"Paper{i + 1}" if i > 0 else "Paper"
+            paper_count += 1
+            label = f"Paper{paper_count}" if paper_count > 1 else "Paper"
         elif "twitter.com" in ref or "x.com" in ref:
             label = "Twitter"
         elif "instagram.com" in ref:
@@ -203,15 +226,26 @@ def format_references(refs: list[str], max_refs: int = 5) -> str:
         elif "scielo" in ref:
             label = "SciELO"
         else:
-            label = f"Ref{i + 1}"
+            ref_count += 1
+            label = f"Ref{ref_count}"
 
         ref_links.append(f"[{label}]({ref})")
 
     return " ".join(ref_links)
 
 
-def save_index(content: str, path: Path):
-    """Save index markdown to file."""
+def save_index(content: str, path: Path) -> None:
+    """Save index markdown to file atomically."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+    fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp_path, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
     logger.info("Updated %s", path)
