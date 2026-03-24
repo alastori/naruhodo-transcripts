@@ -27,7 +27,7 @@ def get_downloaded_episodes(transcripts_dir: Path) -> tuple[set[str], set[str]]:
         return downloaded_numbers, downloaded_titles
 
     for f in transcripts_dir.iterdir():
-        if f.suffix != ".vtt":
+        if f.suffix not in (".vtt", ".md"):
             continue
         filename = f.name
 
@@ -46,8 +46,8 @@ def get_downloaded_episodes(transcripts_dir: Path) -> tuple[set[str], set[str]]:
         if match:
             downloaded_numbers.add(f"X{match.group(1)}")
 
-        # Store normalized title for fallback matching
-        title_match = re.match(r"\d+ - (.+)\.[a-z]{2}\.vtt$", filename)
+        # Store normalized title for fallback matching (.vtt or .whisper.md)
+        title_match = re.match(r"\d+ - (.+?)(?:\.[a-z]{2}\.vtt|\.whisper\.md)$", filename)
         if title_match:
             title = title_match.group(1)
             title = title.replace("\uff1a", ":").replace("\uff1f", "?").replace("\uff01", "!")
