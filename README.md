@@ -218,7 +218,7 @@ This project is not affiliated with or endorsed by the Naruhodo podcast.
 
 - **Naruhodo Podcast**: http://naruhodo.b9.com.br/
 - **Hosts**: Ken Fujioka and Dr. Altay de Souza
-- **Support the podcast**: https://orelo.cc/naruhodo
+- **Support the podcast**: https://orelo.cc/naruhodo or https://www.patreon.com/naruhodo
 
 ## Contributing
 
