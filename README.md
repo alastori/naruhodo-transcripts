@@ -64,19 +64,23 @@ brew install ffmpeg
 uv sync --extra diarize   # includes Whisper + speaker diarization
 ```
 
-Speaker diarization (labeling who says what) is on by default. It requires:
+Speaker diarization (labeling who says what — Ken Fujioka vs Altay de Souza) is on by default. It uses [pyannote](https://github.com/pyannote/pyannote-audio) for speaker detection and [Ollama](https://ollama.com) for speaker identification. Setup:
 
-1. **HuggingFace token** — accept gated model terms (free, one-time):
+1. **Create a free HuggingFace account** at https://huggingface.co/join
+2. **Accept the pyannote model terms** (free, one-time — just click "Agree" on each page):
    - https://huggingface.co/pyannote/speaker-diarization-3.1
    - https://huggingface.co/pyannote/segmentation-3.0
-2. **Ollama** running locally with a model:
+3. **Create an access token** at https://huggingface.co/settings/tokens (Read permission)
+4. **Set the token** in your environment:
+   ```bash
+   export HF_TOKEN="hf_your_token_here"
+   ```
+5. **Pull an Ollama model** for speaker identification:
    ```bash
    ollama pull qwen2.5:72b-instruct-q4_K_M
    ```
 
-```bash
-export HF_TOKEN="hf_your_token_here"
-```
+> **Don't want to set up diarization?** Use `--no-diarize` to skip it and just get plain transcripts — no HuggingFace account or Ollama needed.
 
 ### Usage
 
