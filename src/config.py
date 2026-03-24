@@ -7,6 +7,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 TRANSCRIPTS_DIR = DATA_DIR / "transcripts"
 LOGS_DIR = PROJECT_ROOT / "temp" / "logs"
+AUDIO_CACHE_DIR = PROJECT_ROOT / "temp" / "audio"
 EPISODES_JSON = DATA_DIR / "episodes.json"
 EPISODE_INDEX = DATA_DIR / "episode-index.md"
 

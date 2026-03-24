@@ -4,6 +4,7 @@
 import argparse
 import shutil
 import sys
+import time
 from datetime import datetime
 
 from .config import (
@@ -88,6 +89,7 @@ def cmd_status(args):
     if no_link > 0:
         print(f"\n⚠️  {no_link} episodes are missing YouTube links.")
         print("    Run 'discover-youtube' to try matching them from the playlist.")
+        print("    Or run 'whisper' to transcribe locally from podcast audio.")
 
     if pending > 0:
         cost = estimate_cost(pending)
@@ -336,6 +338,182 @@ def cmd_sync(args):
     return 0
 
 
+def cmd_whisper(args):
+    """Transcribe episodes locally using MLX Whisper."""
+    try:
+        from . import whisper as wh
+    except ImportError:
+        print("Error: MLX Whisper not installed.")
+        print("Install with: pip install naruhodo-transcripts[whisper]")
+        print("Or: pip install mlx-whisper")
+        return 1
+
+    configure_logging(verbose=args.verbose)
+
+    # Load diarization pipeline early if requested (fail fast)
+    diarization_pipeline = None
+    if args.diarize:
+        print("Loading diarization pipeline...")
+        diarization_pipeline = wh.load_diarization_pipeline()
+        if diarization_pipeline is None:
+            print("Error: could not load diarization pipeline.")
+            print("Install: pip install naruhodo-transcripts[diarize]")
+            print("Set HF_TOKEN env var or configure 1Password.")
+            return 1
+        print("Diarization pipeline ready.\n")
+
+    # Find episodes to transcribe
+    episodes = load_episodes(EPISODES_JSON)
+    missing = wh.get_missing_episodes(episodes)
+
+    if args.episode:
+        missing = [ep for ep in missing if ep.get("episode_number") == args.episode]
+        if not missing:
+            all_eps = [ep for ep in episodes if ep.get("episode_number") == args.episode]
+            if all_eps:
+                print(f"Episode #{args.episode} already has a transcript.")
+            else:
+                print(f"Episode #{args.episode} not found.")
+            return 0
+
+    if args.limit > 0:
+        missing = missing[:args.limit]
+
+    if not missing:
+        print("All episodes have transcripts!")
+        return 0
+
+    # Show plan
+    total_audio = wh.estimate_duration(missing)
+    est_time = total_audio * 0.3
+
+    print_banner()
+    print(f"  Episodes to transcribe:  {len(missing)}")
+    print(f"  Total audio:             {wh.format_duration(total_audio)}")
+    print(f"  Model:                   {args.model}")
+    print(f"  Diarization:             {'yes (pyannote + Ollama)' if args.diarize else 'no'}")
+    print(f"  Est. transcription time: ~{wh.format_duration(est_time)}")
+    print(f"  Est. download size:      ~{total_audio / 60:.0f} MB")
+    print()
+
+    if args.dry_run:
+        print("Episodes that would be transcribed:")
+        for ep in missing:
+            print(f"  {ep.get('episode_number', '?'):>4}  {ep['title'][:70]}  ({ep.get('duration', '?')})")
+        return 0
+
+    # Ask for confirmation unless --yes
+    if not args.yes:
+        if not sys.stdin.isatty():
+            print("⚠️  Running in non-interactive mode. Use --yes (-y) to proceed.")
+            return 1
+        try:
+            response = input("Proceed? [y/N]: ")
+            if response.lower() not in ("y", "yes"):
+                print("Aborted.")
+                return 0
+        except (KeyboardInterrupt, EOFError):
+            print("\nAborted.")
+            return 0
+
+    # Create directories
+    TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
+    from .config import AUDIO_CACHE_DIR
+    AUDIO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Process episodes
+    results = {"success": 0, "failed": 0, "diarized": 0, "errors": []}
+    start_time = time.monotonic()
+
+    for i, ep in enumerate(missing, 1):
+        title = ep.get("title", "Unknown")
+        ep_num = ep.get("episode_number", "?")
+        audio_url = ep["audio_url"]
+        output_filename = wh.get_output_filename(ep)
+        output_path = TRANSCRIPTS_DIR / output_filename
+
+        print(f"[{i}/{len(missing)}] #{ep_num}: {title[:60]}")
+
+        if output_path.exists():
+            print(f"    Skipping (already exists)")
+            results["success"] += 1
+            continue
+
+        # Download audio
+        audio_path = AUDIO_CACHE_DIR / f"naruhodo_{ep_num}.mp3"
+        if not audio_path.exists():
+            print(f"    Downloading audio...")
+            if not wh.download_audio(audio_url, audio_path):
+                results["failed"] += 1
+                results["errors"].append({"episode": ep_num, "error": "Download failed"})
+                continue
+
+        audio_size_mb = audio_path.stat().st_size / (1024 * 1024)
+        print(f"    Audio: {audio_size_mb:.1f} MB")
+
+        # Transcribe
+        print(f"    Transcribing with {args.model}...")
+        t0 = time.monotonic()
+        try:
+            result = wh.transcribe(audio_path, model=args.model)
+            wh.save_transcript_markdown(output_path, audio_path, result, args.model)
+            elapsed = time.monotonic() - t0
+            print(f"    Transcribed: {result['word_count']} words, took {wh.format_duration(elapsed)}")
+            results["success"] += 1
+        except Exception as e:
+            elapsed = time.monotonic() - t0
+            print(f"    Failed: {e}")
+            results["failed"] += 1
+            results["errors"].append({"episode": ep_num, "error": str(e)[:200]})
+            if not args.keep_audio and audio_path.exists():
+                audio_path.unlink()
+            continue
+
+        # Diarize if requested
+        if args.diarize and diarization_pipeline and output_path.exists():
+            print(f"    Diarizing...")
+            t1 = time.monotonic()
+            try:
+                mapping = wh.add_diarization_to_transcript(
+                    output_path, audio_path, diarization_pipeline, args.ollama_model,
+                )
+                d_elapsed = time.monotonic() - t1
+                s0 = mapping.get("SPEAKER_00", "?")
+                s1 = mapping.get("SPEAKER_01", "?")
+                confidence = mapping.get("confidence", "?")
+                print(f"    Speakers: {s0} & {s1} (confidence: {confidence}, took {wh.format_duration(d_elapsed)})")
+                results["diarized"] += 1
+            except Exception as e:
+                print(f"    Diarization failed: {e}")
+
+        # Clean up audio
+        if not args.keep_audio and audio_path.exists():
+            audio_path.unlink()
+
+    # Update status and save
+    from .index_generator import generate_index_markdown, save_index, update_episode_status
+    downloaded, pending, no_link = update_episode_status(episodes, TRANSCRIPTS_DIR)
+    save_episodes(episodes, EPISODES_JSON)
+    index_content = generate_index_markdown(episodes, downloaded, pending, no_link)
+    save_index(index_content, EPISODE_INDEX)
+
+    # Summary
+    total_time = time.monotonic() - start_time
+    print(f"\n{'='*50}")
+    print(f"Transcription complete in {wh.format_duration(total_time)}")
+    print(f"  Success:   {results['success']}")
+    if args.diarize:
+        print(f"  Diarized:  {results['diarized']}")
+    print(f"  Failed:    {results['failed']}")
+
+    if results["errors"]:
+        print(f"\nErrors:")
+        for err in results["errors"][:10]:
+            print(f"  #{err['episode']}: {err['error'][:80]}")
+
+    return 0 if results["failed"] == 0 else 1
+
+
 def ensure_directories():
     """Create required directories if they don't exist."""
     TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -389,7 +567,7 @@ def main():
     # sync command
     sync_parser = subparsers.add_parser(
         "sync",
-        help="Download pending transcripts",
+        help="Download pending transcripts (YouTube auto-captions)",
     )
     sync_parser.add_argument(
         "-y", "--yes",
@@ -397,6 +575,45 @@ def main():
         help="Skip confirmation prompt",
     )
     sync_parser.set_defaults(func=cmd_sync)
+
+    # whisper command
+    whisper_parser = subparsers.add_parser(
+        "whisper",
+        help="Transcribe locally with MLX Whisper (Apple Silicon)",
+    )
+    whisper_parser.add_argument(
+        "--limit", type=int, default=0,
+        help="Maximum number of episodes to transcribe (0 = all)",
+    )
+    whisper_parser.add_argument(
+        "--episode", type=str,
+        help="Transcribe a specific episode by number (e.g., 400)",
+    )
+    whisper_parser.add_argument(
+        "--model", type=str, default="large-v3",
+        help="Whisper model (default: large-v3)",
+    )
+    whisper_parser.add_argument(
+        "--diarize", action="store_true",
+        help="Add speaker diarization (requires pyannote + Ollama)",
+    )
+    whisper_parser.add_argument(
+        "--ollama-model", type=str, default="qwen2.5:72b-instruct-q4_K_M",
+        help="Ollama model for speaker identification",
+    )
+    whisper_parser.add_argument(
+        "-y", "--yes", action="store_true",
+        help="Skip confirmation prompt",
+    )
+    whisper_parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Show what would be transcribed without doing it",
+    )
+    whisper_parser.add_argument(
+        "--keep-audio", action="store_true",
+        help="Keep downloaded audio files after transcription",
+    )
+    whisper_parser.set_defaults(func=cmd_whisper)
 
     args = parser.parse_args()
 

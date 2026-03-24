@@ -2,8 +2,8 @@
 data/transcripts/
 *.vtt
 
-# Deprecated scripts (old pipeline, removed in eadcbb8)
-# scripts/ directory is now used for utility scripts like whisper_transcribe.py
+# Deprecated standalone scripts (functionality moved to src/whisper.py + CLI)
+# scripts/
 
 # Temporary files and logs
 temp/
