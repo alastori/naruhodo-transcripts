@@ -343,9 +343,8 @@ def cmd_whisper(args):
     try:
         from . import whisper as wh
     except ImportError:
-        print("Error: MLX Whisper not installed.")
-        print("Install with: pip install naruhodo-transcripts[whisper]")
-        print("Or: pip install mlx-whisper")
+        print("Error: MLX Whisper not installed (requires Apple Silicon).")
+        print("Install with: uv sync --extra whisper")
         return 1
 
     configure_logging(verbose=args.verbose)
@@ -357,8 +356,9 @@ def cmd_whisper(args):
         diarization_pipeline = wh.load_diarization_pipeline()
         if diarization_pipeline is None:
             print("Error: could not load diarization pipeline.")
-            print("Install: pip install naruhodo-transcripts[diarize]")
-            print("Set HF_TOKEN env var or configure 1Password.")
+            print("Install: uv sync --extra diarize")
+            print("Set HF_TOKEN env var (see README for setup steps).")
+            print("Or use --no-diarize to skip speaker labels.")
             return 1
         print("Diarization pipeline ready.\n")
 

@@ -4,7 +4,7 @@ Scripts and metadata for downloading and generating transcripts from the [Naruho
 
 ## What's Included
 
-- **Episode Metadata**: 568 episodes with structured references, topics, and more (`data/episodes.json`)
+- **Episode Metadata**: 500+ episodes with structured references, topics, and more (`data/episodes.json`)
 - **Episode Index**: Human-readable catalog (`data/episode-index.md`)
 - **Transcript Tools**: Download YouTube auto-captions or transcribe locally with Whisper
 
@@ -75,10 +75,11 @@ Speaker diarization (labeling who says what — Ken Fujioka vs Altay de Souza) i
    ```bash
    export HF_TOKEN="hf_your_token_here"
    ```
-5. **Pull an Ollama model** for speaker identification:
+5. **Install and start [Ollama](https://ollama.com)**, then pull a model for speaker identification:
    ```bash
    ollama pull qwen2.5:72b-instruct-q4_K_M
    ```
+   Ollama must be running when you use `naruhodo whisper` (launch the app or run `ollama serve`).
 
 > **Don't want to set up diarization?** Use `--no-diarize` to skip it and just get plain transcripts — no HuggingFace account or Ollama needed.
 
@@ -122,7 +123,7 @@ Transcripts are saved as `.whisper.md` in `data/transcripts/` with speaker label
 | `naruhodo whisper` | Transcribe locally with speaker labels (MLX Whisper + pyannote) |
 | `naruhodo whisper --no-diarize` | Transcribe without speaker labels |
 
-Use `-v` before the subcommand for verbose output. Most commands accept `--help` for details.
+All commands support `--help` for full flag details. Use `-v` before the subcommand for verbose output.
 
 ## Data Schema
 
