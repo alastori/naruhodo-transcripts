@@ -72,6 +72,7 @@ JUNK_DOMAINS = frozenset([
     "feedburner.com", "feeds.feedburner.com",  # RSS redirect artifacts
     "gate.sc",  # SoundCloud gate URLs
     "goo.gl",  # URL shortener (can't classify without resolving)
+    "cutt.ly", "tiny.cc", "shorturl.at",  # URL shorteners
     "me.me",  # Meme site, not a reference
 ])
 
@@ -95,10 +96,32 @@ ACADEMIC_DOMAINS = frozenset([
     "sci-hub.tw", "sci-hub.st", "sci-hub.se",  # mirrors (content is academic)
     "semanticscholar.org", "pdfs.semanticscholar.org",  # Semantic Scholar
     "psyarxiv.com",  # psychology preprints
+    "science.sciencemag.org", "sciencemag.org",  # Science magazine
+    "journals.lww.com",  # Lippincott Williams & Wilkins
+    "pepsic.bvsalud.org",  # Brazilian psychology index
+    "routledge.com", "taylorfrancis.com",  # Taylor & Francis imprints
+    "karger.com",  # Karger publishers
+    "ieeexplore.ieee.org",  # IEEE
+    "direct.mit.edu",  # MIT Press
+    "escholarship.org", "core.ac.uk", "academia.edu",  # academic repositories
+    "elifesciences.org",  # eLife journal
+    "osf.io",  # Open Science Framework
+    "eric.ed.gov",  # ERIC education database
+    "revistapesquisa.fapesp.br",  # FAPESP research magazine
+    "cochrane.org",  # Cochrane reviews
+    "europepmc.org",  # Europe PubMed Central
+    "scielosp.org",  # SciELO public health
 ])
 
 PODCAST_DOMAINS = frozenset([
     "open.spotify.com", "soundcloud.com",  # podcast/audio platforms
+    "anchor.fm", "podcasts.apple.com",  # podcast hosting
+    "mixcloud.com",  # audio platform
+])
+
+ENCYCLOPEDIA_DOMAINS = frozenset([
+    "wikipedia.org",
+    "plato.stanford.edu",  # Stanford Encyclopedia of Philosophy
 ])
 
 BOOK_DOMAINS = frozenset([
@@ -117,8 +140,6 @@ SOCIAL_DOMAINS = frozenset([
     "twitter.com", "x.com", "instagram.com", "facebook.com",
     "linkedin.com", "threads.net",
 ])
-
-ENCYCLOPEDIA_DOMAINS = frozenset(["wikipedia.org"])
 
 # Summary synthesis patterns
 _RE_SPONSOR_SPLIT = re.compile(
