@@ -71,6 +71,8 @@ JUNK_DOMAINS = frozenset([
     "b.sc", "m.sc",  # False positives from B.Sc/M.Sc abbreviations in text
     "feedburner.com", "feeds.feedburner.com",  # RSS redirect artifacts
     "gate.sc",  # SoundCloud gate URLs
+    "goo.gl",  # URL shortener (can't classify without resolving)
+    "me.me",  # Meme site, not a reference
 ])
 
 # Reference domain classification sets
@@ -88,7 +90,24 @@ ACADEMIC_DOMAINS = frozenset([
     "researchgate.net", "jstor.org", "cambridge.org",
     "annualreviews.org", "jamanetwork.com", "royalsocietypublishing.org",
     "dl.acm.org", "jneurosci.org", "apa.org",
+    "proquest.com", "brill.com",  # academic databases
+    "jci.org", "jsr.org",  # academic journals
+    "sci-hub.tw", "sci-hub.st", "sci-hub.se",  # mirrors (content is academic)
+    "semanticscholar.org", "pdfs.semanticscholar.org",  # Semantic Scholar
+    "psyarxiv.com",  # psychology preprints
 ])
+
+PODCAST_DOMAINS = frozenset([
+    "open.spotify.com", "soundcloud.com",  # podcast/audio platforms
+])
+
+BOOK_DOMAINS = frozenset([
+    "books.google.com", "books.google.com.br",
+    "amazon.com.br", "amazon.com",  # book links
+])
+
+# B9 network domains (podcast cross-promotion, not external references)
+B9_DOMAINS = frozenset(["b9.com.br"])
 
 CREDENTIAL_DOMAINS = frozenset(["lattes.cnpq.br", "orcid.org"])
 
@@ -303,10 +322,14 @@ def _generate_reference_label(domain: str, ref_type: str) -> str:
         if "orcid" in domain:
             return "ORCID"
         return "Profile"
+    if ref_type == "book":
+        return "Book"
     if ref_type == "thesis":
         return "Tese"
     if ref_type == "video":
         return "Video"
+    if ref_type == "podcast":
+        return "Podcast"
     if ref_type == "cross_reference":
         return "Naruhodo"
     if ref_type == "social":
@@ -333,8 +356,12 @@ def classify_reference(url: str) -> dict:
     # Cross-references to other Naruhodo episodes
     if _is_naruhodo_self_reference(url):
         ref_type = "cross_reference"
+    elif _matches_domain_set(domain, B9_DOMAINS):
+        ref_type = "cross_reference"  # B9 network (sister podcasts)
     elif _matches_domain_set(domain, ACADEMIC_DOMAINS):
         ref_type = "academic"
+    elif _matches_domain_set(domain, BOOK_DOMAINS):
+        ref_type = "book"
     elif _matches_domain_set(domain, CREDENTIAL_DOMAINS):
         ref_type = "credential"
     elif _matches_domain_set(domain, THESIS_DOMAINS):
@@ -343,6 +370,8 @@ def classify_reference(url: str) -> dict:
         ref_type = "social"
     elif _matches_domain_set(domain, ENCYCLOPEDIA_DOMAINS):
         ref_type = "encyclopedia"
+    elif _matches_domain_set(domain, PODCAST_DOMAINS):
+        ref_type = "podcast"
     elif "youtube.com" in domain or "youtu.be" in domain:
         ref_type = "video"
     else:
