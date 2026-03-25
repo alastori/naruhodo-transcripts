@@ -2,10 +2,14 @@
 """CLI for Naruhodo podcast transcript downloader."""
 
 import argparse
+import functools
 import shutil
 import sys
 import time
 from datetime import datetime
+
+# Ensure print output is visible immediately when piped (e.g., tee, CI logs)
+print = functools.partial(print, flush=True)
 
 from .config import (
     DATA_DIR,
