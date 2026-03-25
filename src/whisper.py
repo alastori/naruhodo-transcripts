@@ -44,14 +44,34 @@ OLLAMA_URL = "http://localhost:11434/api/generate"
 DEFAULT_OLLAMA_MODEL = "qwen2.5:72b-instruct-q4_K_M"
 
 # Speaker identification prompt template
-_SPEAKER_ID_PROMPT = """You are analyzing a transcript from the Naruhodo podcast. This is a Brazilian Portuguese science podcast with two hosts:
-- **Ken Fujioka**: the curious layperson who asks questions, presents topics, and reads listener messages
-- **Altay de Souza** (Dr.): the scientist who explains, gives the scientific perspective, and provides deeper analysis
+_SPEAKER_ID_PROMPT = """You are analyzing a transcript from the Naruhodo podcast, a Brazilian Portuguese science podcast.
 
-The transcript below has two anonymous speaker labels (SPEAKER_00 and SPEAKER_01). Based on the content, speaking patterns, and any self-introductions (e.g., "Eu sou o Ken Fujioka", "Eu sou o Altay de Souza"), determine which label corresponds to which host.
+The regular hosts are:
+- **Ken Fujioka**: the curious layperson who asks questions, presents topics, reads listener messages
+- **Altay de Souza** (Dr.): the scientist who explains and gives the scientific perspective
+
+Some episodes also feature:
+- **Reginaldo Cursino**: the audio engineer who occasionally participates in discussions
+- Guest specialists who explain topics in their domain
+
+The transcript has anonymous speaker labels (SPEAKER_00, SPEAKER_01). Based on the content, speaking patterns, and any self-introductions, determine which label corresponds to which person. Use actual names when you can identify them.
 
 Respond ONLY with valid JSON:
-{{"SPEAKER_00": "Ken Fujioka" or "Altay de Souza", "SPEAKER_01": "Ken Fujioka" or "Altay de Souza", "confidence": "high" or "medium" or "low", "evidence": "brief explanation"}}
+{{"SPEAKER_00": "name", "SPEAKER_01": "name", "confidence": "high" or "medium" or "low", "evidence": "brief explanation"}}
+
+Transcript:
+{transcript}"""
+
+_SPEAKER_ID_PROMPT_INTERVIEW = """You are analyzing a transcript from a Naruhodo podcast interview episode. In interviews, Ken Fujioka interviews a guest one-on-one (Altay de Souza is NOT present).
+
+The speakers are:
+- **Ken Fujioka**: the interviewer who asks questions, introduces the guest, and guides the conversation
+- **{guest_name}**: the interview guest who answers questions and shares their expertise
+
+The transcript has anonymous speaker labels. Based on the content, speaking patterns, and any introductions, determine which label corresponds to which person.
+
+Respond ONLY with valid JSON:
+{{"SPEAKER_00": "Ken Fujioka" or "{guest_name}", "SPEAKER_01": "Ken Fujioka" or "{guest_name}", "confidence": "high" or "medium" or "low", "evidence": "brief explanation"}}
 
 Transcript:
 {transcript}"""
@@ -269,9 +289,21 @@ def load_diarization_pipeline():
         return None
 
 
-def diarize_audio(pipeline, audio_path: Path) -> list[tuple[float, float, str]]:
-    """Run speaker diarization. Returns list of (start, end, speaker) tuples."""
-    diarization = pipeline(str(audio_path), num_speakers=2)
+def diarize_audio(
+    pipeline,
+    audio_path: Path,
+    num_speakers: int = 2,
+) -> list[tuple[float, float, str]]:
+    """Run speaker diarization.
+
+    Args:
+        pipeline: pyannote diarization pipeline
+        audio_path: Path to audio file
+        num_speakers: Expected number of speakers (2 for regular, 3 for interviews)
+
+    Returns list of (start, end, speaker) tuples.
+    """
+    diarization = pipeline(str(audio_path), num_speakers=num_speakers)
     return [
         (turn.start, turn.end, speaker)
         for turn, _, speaker in diarization.itertracks(yield_label=True)
@@ -279,39 +311,71 @@ def diarize_audio(pipeline, audio_path: Path) -> list[tuple[float, float, str]]:
 
 
 def merge_transcript_with_diarization(
-    transcript_text: str,
+    whisper_segments: list[dict],
     turns: list[tuple[float, float, str]],
-    total_duration: float,
 ) -> list[tuple[str, str]]:
-    """Merge transcript with speaker segments via proportional word alignment.
+    """Merge Whisper segments with speaker diarization using timestamps.
+
+    Uses Whisper's word-level timestamps for accurate alignment rather
+    than proportional word distribution.
+
+    Args:
+        whisper_segments: Whisper output segments with 'start', 'end', 'text' keys
+        turns: Speaker diarization turns from pyannote
 
     Returns list of (speaker_label, text) tuples.
     """
-    words = transcript_text.split()
-    if not words or total_duration <= 0:
-        return [("SPEAKER_00", transcript_text)]
+    if not whisper_segments or not turns:
+        text = " ".join(s.get("text", "") for s in whisper_segments)
+        return [("SPEAKER_00", text.strip())] if text.strip() else []
 
-    words_per_sec = len(words) / total_duration
+    def _get_speaker_at(timestamp: float) -> str:
+        """Find which speaker is active at a given timestamp."""
+        best_speaker = "SPEAKER_00"
+        best_overlap = 0.0
+        for start, end, speaker in turns:
+            # How much does this turn overlap with a small window around timestamp?
+            overlap = max(0, min(end, timestamp + 0.5) - max(start, timestamp - 0.5))
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_speaker = speaker
+        return best_speaker
+
     segments = []
     current_speaker = None
     current_words = []
 
-    for start, end, speaker in turns:
-        if end - start < 0.3:
-            continue
-        word_start = int(start * words_per_sec)
-        word_end = int(end * words_per_sec)
-        segment_words = words[word_start:word_end]
-        if not segment_words:
-            continue
-
-        if speaker == current_speaker:
-            current_words.extend(segment_words)
+    for seg in whisper_segments:
+        # Use word-level timestamps if available, otherwise segment-level
+        words = seg.get("words", [])
+        if words:
+            for word_info in words:
+                ts = word_info.get("start", seg.get("start", 0))
+                word = word_info.get("word", "").strip()
+                if not word:
+                    continue
+                speaker = _get_speaker_at(ts)
+                if speaker == current_speaker:
+                    current_words.append(word)
+                else:
+                    if current_words and current_speaker:
+                        segments.append((current_speaker, " ".join(current_words)))
+                    current_speaker = speaker
+                    current_words = [word]
         else:
-            if current_words and current_speaker:
-                segments.append((current_speaker, " ".join(current_words)))
-            current_speaker = speaker
-            current_words = list(segment_words)
+            # Fallback: use segment midpoint
+            midpoint = (seg.get("start", 0) + seg.get("end", 0)) / 2
+            text = seg.get("text", "").strip()
+            if not text:
+                continue
+            speaker = _get_speaker_at(midpoint)
+            if speaker == current_speaker:
+                current_words.extend(text.split())
+            else:
+                if current_words and current_speaker:
+                    segments.append((current_speaker, " ".join(current_words)))
+                current_speaker = speaker
+                current_words = text.split()
 
     if current_words and current_speaker:
         segments.append((current_speaker, " ".join(current_words)))
@@ -322,8 +386,10 @@ def merge_transcript_with_diarization(
 def identify_speakers(
     labeled_segments: list[tuple[str, str]],
     ollama_model: str = DEFAULT_OLLAMA_MODEL,
+    episode_type: str = "regular",
+    guest_name: str = "",
 ) -> dict[str, str]:
-    """Use Ollama to identify which SPEAKER_XX is Ken vs Altay."""
+    """Use Ollama to identify which SPEAKER_XX is Ken vs Altay (and guest for interviews)."""
     import requests as req
 
     # Condense to first ~2000 words for the LLM
@@ -335,7 +401,13 @@ def identify_speakers(
         if word_count > 2000:
             break
 
-    prompt = _SPEAKER_ID_PROMPT.format(transcript="\n\n".join(lines))
+    if episode_type == "interview" and guest_name:
+        prompt = _SPEAKER_ID_PROMPT_INTERVIEW.format(
+            guest_name=guest_name,
+            transcript="\n\n".join(lines),
+        )
+    else:
+        prompt = _SPEAKER_ID_PROMPT.format(transcript="\n\n".join(lines))
 
     try:
         resp = req.post(OLLAMA_URL, json={
@@ -383,28 +455,33 @@ def add_diarization_to_transcript(
     output_path: Path,
     audio_path: Path,
     diarization_pipeline,
+    whisper_segments: list[dict],
     ollama_model: str = DEFAULT_OLLAMA_MODEL,
+    episode_type: str = "regular",
+    guest_name: str = "",
 ) -> dict:
     """Add speaker labels to an existing Whisper transcript file.
+
+    Uses Whisper's word-level timestamps for accurate speaker alignment.
 
     Returns speaker mapping result.
     """
     content = output_path.read_text(encoding="utf-8")
     parts = content.split("---\n", 1)
     header = parts[0] + "---\n" if len(parts) > 1 else ""
-    transcript_text = parts[-1].strip()
 
-    turns = diarize_audio(diarization_pipeline, audio_path)
-    total_duration = get_audio_duration(audio_path)
+    # Interviews are Ken + guest (2 speakers). Regular episodes are Ken + Altay (2 speakers).
+    turns = diarize_audio(diarization_pipeline, audio_path, num_speakers=2)
 
-    labeled_segments = merge_transcript_with_diarization(
-        transcript_text, turns, total_duration,
-    )
+    labeled_segments = merge_transcript_with_diarization(whisper_segments, turns)
 
     if not labeled_segments:
         return {"confidence": "failed", "evidence": "No segments produced"}
 
-    speaker_mapping = identify_speakers(labeled_segments, ollama_model)
+    speaker_mapping = identify_speakers(
+        labeled_segments, ollama_model,
+        episode_type=episode_type, guest_name=guest_name,
+    )
 
     # Format diarized transcript
     diarized_lines = []
@@ -412,9 +489,14 @@ def add_diarization_to_transcript(
         name = speaker_mapping.get(speaker_label, speaker_label)
         diarized_lines.append(f"**{name}:** {text}")
 
+    # Build speaker info line
+    speaker_names = [
+        speaker_mapping.get(f"SPEAKER_{i:02d}", "")
+        for i in range(2)
+    ]
+    speaker_names = [n for n in speaker_names if n]
     speaker_info = (
-        f"**Speakers:** {speaker_mapping.get('SPEAKER_00', '?')} & "
-        f"{speaker_mapping.get('SPEAKER_01', '?')} "
+        f"**Speakers:** {' & '.join(speaker_names)} "
         f"(confidence: {speaker_mapping.get('confidence', '?')})\n"
     )
 

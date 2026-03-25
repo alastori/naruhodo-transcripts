@@ -475,17 +475,27 @@ def cmd_whisper(args):
 
         # Diarize if requested
         if not args.no_diarize and diarization_pipeline and output_path.exists():
-            print(f"    Diarizing...")
+            ep_type = ep.get("episode_type", "regular")
+            guest = ep.get("guest", "")
+            speaker_label = f"({ep_type}, guest: {guest})" if guest else f"({ep_type})"
+            print(f"    Diarizing {speaker_label}...")
             t1 = time.monotonic()
             try:
                 mapping = wh.add_diarization_to_transcript(
-                    output_path, audio_path, diarization_pipeline, args.ollama_model,
+                    output_path, audio_path, diarization_pipeline,
+                    whisper_segments=result.get("segments", []),
+                    ollama_model=args.ollama_model,
+                    episode_type=ep_type,
+                    guest_name=guest,
                 )
                 d_elapsed = time.monotonic() - t1
-                s0 = mapping.get("SPEAKER_00", "?")
-                s1 = mapping.get("SPEAKER_01", "?")
+                speaker_names = [
+                    mapping.get(f"SPEAKER_{i:02d}", "")
+                    for i in range(2)
+                ]
+                speaker_names = [n for n in speaker_names if n]
                 confidence = mapping.get("confidence", "?")
-                print(f"    Speakers: {s0} & {s1} (confidence: {confidence}, took {wh.format_duration(d_elapsed)})")
+                print(f"    Speakers: {' & '.join(speaker_names)} (confidence: {confidence}, took {wh.format_duration(d_elapsed)})")
                 results["diarized"] += 1
             except Exception as e:
                 print(f"    Diarization failed: {e}")
