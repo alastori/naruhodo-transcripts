@@ -255,15 +255,6 @@ def load_diarization_pipeline():
     try:
         import torch
         import warnings
-        warnings.filterwarnings("ignore")
-
-        # PyTorch 2.6+ fix: trust pyannote model checkpoints from HuggingFace
-        _original_torch_load = torch.load
-        def _safe_torch_load(*args, **kwargs):
-            kwargs["weights_only"] = False
-            return _original_torch_load(*args, **kwargs)
-        torch.load = _safe_torch_load
-
         from pyannote.audio import Pipeline
 
         hf_token = get_hf_token()
@@ -271,10 +262,22 @@ def load_diarization_pipeline():
             logger.error("No HuggingFace token found. Set HF_TOKEN env var.")
             return None
 
-        pipeline = Pipeline.from_pretrained(
-            "pyannote/speaker-diarization-3.1",
-            use_auth_token=hf_token,
-        )
+        # PyTorch 2.6+ fix: trust pyannote model checkpoints from HuggingFace
+        _original_torch_load = torch.load
+        def _safe_torch_load(*args, **kwargs):
+            kwargs["weights_only"] = False
+            return _original_torch_load(*args, **kwargs)
+
+        torch.load = _safe_torch_load
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                pipeline = Pipeline.from_pretrained(
+                    "pyannote/speaker-diarization-3.1",
+                    use_auth_token=hf_token,
+                )
+        finally:
+            torch.load = _original_torch_load
 
         if torch.backends.mps.is_available():
             pipeline = pipeline.to(torch.device("mps"))
@@ -388,8 +391,12 @@ def identify_speakers(
     ollama_model: str = DEFAULT_OLLAMA_MODEL,
     episode_type: str = "regular",
     guest_name: str = "",
-) -> dict[str, str]:
-    """Use Ollama to identify which SPEAKER_XX is Ken vs Altay (and guest for interviews)."""
+) -> dict:
+    """Use Ollama to identify which SPEAKER_XX is Ken vs Altay (and guest for interviews).
+
+    Returns dict with keys: mapping (dict of speaker labels to names),
+    confidence (str), and evidence (str).
+    """
     import requests as req
 
     # Condense to first ~2000 words for the LLM
@@ -423,16 +430,20 @@ def identify_speakers(
             raw = raw[4:].strip()
         mapping = json.loads(raw)
         return {
-            "SPEAKER_00": mapping.get("SPEAKER_00", "SPEAKER_00"),
-            "SPEAKER_01": mapping.get("SPEAKER_01", "SPEAKER_01"),
+            "mapping": {
+                "SPEAKER_00": mapping.get("SPEAKER_00", "SPEAKER_00"),
+                "SPEAKER_01": mapping.get("SPEAKER_01", "SPEAKER_01"),
+            },
             "confidence": mapping.get("confidence", "unknown"),
             "evidence": mapping.get("evidence", ""),
         }
     except Exception as e:
         logger.warning("Ollama speaker ID failed: %s", e)
         return {
-            "SPEAKER_00": "SPEAKER_00",
-            "SPEAKER_01": "SPEAKER_01",
+            "mapping": {
+                "SPEAKER_00": "SPEAKER_00",
+                "SPEAKER_01": "SPEAKER_01",
+            },
             "confidence": "failed",
             "evidence": str(e),
         }
@@ -476,31 +487,28 @@ def add_diarization_to_transcript(
     labeled_segments = merge_transcript_with_diarization(whisper_segments, turns)
 
     if not labeled_segments:
-        return {"confidence": "failed", "evidence": "No segments produced"}
+        return {"mapping": {}, "confidence": "failed", "evidence": "No segments produced"}
 
-    speaker_mapping = identify_speakers(
+    speaker_result = identify_speakers(
         labeled_segments, ollama_model,
         episode_type=episode_type, guest_name=guest_name,
     )
+    name_map = speaker_result["mapping"]
 
     # Format diarized transcript
     diarized_lines = []
     for speaker_label, text in labeled_segments:
-        name = speaker_mapping.get(speaker_label, speaker_label)
+        name = name_map.get(speaker_label, speaker_label)
         diarized_lines.append(f"**{name}:** {text}")
 
-    # Build speaker info line
-    speaker_names = [
-        speaker_mapping.get(f"SPEAKER_{i:02d}", "")
-        for i in range(2)
-    ]
-    speaker_names = [n for n in speaker_names if n]
+    # Build speaker info line from actual mapping values
+    speaker_names = [n for n in name_map.values() if n]
     speaker_info = (
         f"**Speakers:** {' & '.join(speaker_names)} "
-        f"(confidence: {speaker_mapping.get('confidence', '?')})\n"
+        f"(confidence: {speaker_result.get('confidence', '?')})\n"
     )
 
     new_content = header + speaker_info + "\n---\n\n" + "\n\n".join(diarized_lines)
     output_path.write_text(new_content, encoding="utf-8")
 
-    return speaker_mapping
+    return speaker_result
