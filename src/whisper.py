@@ -415,7 +415,7 @@ def identify_speakers(
             "prompt": prompt,
             "stream": False,
             "options": {"temperature": 0},
-        }, timeout=120)
+        }, timeout=300)
         resp.raise_for_status()
 
         raw = resp.json().get("response", "").strip().strip("`").strip()
