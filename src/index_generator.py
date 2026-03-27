@@ -86,18 +86,20 @@ def update_episode_status(
     for ep in episodes:
         title = ep["title"]
         ep_num = ep.get("episode_number", "")
+        # Normalize: strip leading zeros to match get_downloaded_episodes (which uses int())
+        ep_num_norm = str(int(ep_num)) if ep_num.isdigit() else ep_num
 
         is_downloaded = False
 
         # Check by episode number and type (most reliable)
-        if "Entrevista" in title and ep_num:
-            if f"E{ep_num}" in downloaded_numbers:
+        if "Entrevista" in title and ep_num_norm:
+            if f"E{ep_num_norm}" in downloaded_numbers:
                 is_downloaded = True
-        elif "Extra" in title and ep_num:
-            if f"X{ep_num}" in downloaded_numbers:
+        elif "Extra" in title and ep_num_norm:
+            if f"X{ep_num_norm}" in downloaded_numbers:
                 is_downloaded = True
-        elif ep_num:
-            if f"N{ep_num}" in downloaded_numbers:
+        elif ep_num_norm:
+            if f"N{ep_num_norm}" in downloaded_numbers:
                 is_downloaded = True
 
         # Fallback to title matching
