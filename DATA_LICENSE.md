@@ -4,7 +4,7 @@ This document explains the licensing and rights for the different types of data 
 
 ## Code (MIT License)
 
-All Python code in the `src/` and `scripts/` directories is released under the MIT License. See [LICENSE](LICENSE) for details.
+All Python code in `src/`, prompt templates in `prompts/`, and documentation in `docs/` are released under the MIT License. See [LICENSE](LICENSE) for details.
 
 ## Episode Metadata (CC BY-NC 4.0)
 
@@ -46,10 +46,6 @@ Transcripts generated using these tools should be used for:
 - Non-commercial text analysis
 
 **Do not redistribute generated transcripts.**
-
-## Prompt Templates (MIT License)
-
-The prompt templates in `prompts/` are released under the MIT License as part of the codebase.
 
 ## Attribution
 

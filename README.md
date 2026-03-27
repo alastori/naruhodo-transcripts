@@ -1,221 +1,84 @@
 # Naruhodo Podcast Transcripts
 
-Scripts and metadata for downloading and generating transcripts from the [Naruhodo podcast](http://naruhodo.b9.com.br/) — a Brazilian Portuguese science podcast hosted by Ken Fujioka and Dr. Altay de Souza.
+CLI toolkit and curated metadata for the [Naruhodo podcast](http://naruhodo.b9.com.br/) (Brazilian Portuguese, science). Download YouTube auto-captions or transcribe locally with Whisper. Useful for accessibility, language study, or text analysis.
 
 ## What's Included
 
 - **Episode Metadata**: 500+ episodes with structured references, topics, and more (`data/episodes.json`)
 - **Episode Index**: Human-readable catalog (`data/episode-index.md`)
-- **Transcript Tools**: Download YouTube auto-captions or transcribe locally with Whisper
+- **Transcript Tools**: CLI to download YouTube captions or transcribe locally with Whisper
 
-**Not included**: The actual transcript files (`.vtt` / `.md`). You generate them locally using the tools below.
+Transcript files are not included. You generate them locally using the `naruhodo` CLI.
 
 ## Quick Start
 
-### Prerequisites
-
-- Python 3.10+
-- [uv](https://docs.astral.sh/uv/) (recommended) or pip
-
-### Install and Run
-
 ```bash
+# Prerequisites: Python 3.10+, uv (https://docs.astral.sh/uv/)
+
 git clone https://github.com/alastori/naruhodo-transcripts.git
 cd naruhodo-transcripts
 uv sync
 
-# 1. Fetch episode metadata from RSS feed
+# Fetch episode metadata, match YouTube links, download captions
 uv run naruhodo refresh-index
-
-# 2. Match YouTube videos to episodes
 uv run naruhodo discover-youtube
-
-# 3. Download transcripts (YouTube auto-captions)
 uv run naruhodo sync
 ```
 
-That's it. The `sync` command shows a cost estimate, asks for confirmation, handles rate limits automatically, and saves progress so you can Ctrl+C and resume.
-
-### Check Status
-
-```bash
-uv run naruhodo status
-```
-
-```
-📊 Naruhodo Transcript Sync
-
-Current status:
-  ├─ Episodes in metadata:       568
-  ├─ Transcripts downloaded:     487
-  ├─ Pending downloads:          34
-  └─ Missing YouTube link:       47
-```
+The `sync` command shows a time estimate, asks for confirmation, handles YouTube rate limits automatically, and saves progress so you can Ctrl+C and resume.
 
 ## Local Whisper Transcription (Optional)
 
-Some episodes (~47) don't have YouTube links. For these — or for higher-quality transcripts on any episode — you can transcribe directly from the podcast audio using [MLX Whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) on Apple Silicon.
-
-### Setup
+For episodes without YouTube links, or for higher-quality transcripts, transcribe directly from the podcast audio using [MLX Whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) on Apple Silicon.
 
 ```bash
-# Apple Silicon Mac required (M1/M2/M3/M4)
-brew install ffmpeg
-uv sync --extra diarize   # includes Whisper + speaker diarization
+# Requires: Apple Silicon Mac, ffmpeg (brew install ffmpeg)
+uv sync --extra whisper                          # transcription only
+uv sync --extra diarize                          # transcription + speaker labels
+
+uv run naruhodo whisper --no-diarize --yes       # plain transcripts
+uv run naruhodo whisper --yes                    # with speaker labels (default)
+uv run naruhodo whisper --llm claude:sonnet --yes  # use Claude for speaker ID
 ```
 
-Speaker diarization (labeling who says what) is on by default. It uses [pyannote](https://github.com/pyannote/pyannote-audio) community-1 for speaker detection and an LLM for speaker identification. Setup:
+Speaker diarization labels each paragraph with the speaker name (Ken Fujioka vs Altay de Souza). It requires a [HuggingFace](https://huggingface.co/join) token and an LLM. See [Diarization Setup](docs/diarization-setup.md) for details.
 
-1. **Create a free HuggingFace account** at https://huggingface.co/join
-2. **Accept the pyannote model terms** (free, one-time, click "Agree" on each page):
-   - https://huggingface.co/pyannote/speaker-diarization-community-1
-   - https://huggingface.co/pyannote/segmentation-3.0
-3. **Create an access token** at https://huggingface.co/settings/tokens (Read permission)
-4. **Set the token** in your environment:
-   ```bash
-   export HF_TOKEN="hf_your_token_here"
-   ```
-5. **Set up an LLM** for speaker identification (pluggable, pick one):
-   ```bash
-   # Option A: Ollama (local, free)
-   ollama pull qwen2.5:72b-instruct-q4_K_M
-   # Ollama must be running: launch the app or run `ollama serve`
-
-   # Option B: Claude CLI (higher quality)
-   # Uses your existing Claude Code installation
-   ```
-
-> **Don't want to set up diarization?** Use `--no-diarize` to skip it and just get plain transcripts. No HuggingFace account or LLM needed.
-
-### Usage
-
-```bash
-# See what needs transcribing
-uv run naruhodo whisper --dry-run
-
-# Transcribe a single episode (test run)
-uv run naruhodo whisper --episode 9 --yes
-
-# Transcribe 10 episodes
-uv run naruhodo whisper --limit 10 --yes
-
-# Transcribe all missing episodes
-uv run naruhodo whisper --yes
-
-# Skip diarization (transcription only, no speaker labels)
-uv run naruhodo whisper --no-diarize --yes
-
-# Use Claude instead of Ollama for speaker identification
-uv run naruhodo whisper --llm claude:sonnet --yes
-```
-
-Transcripts are saved as `.whisper.md` in `data/transcripts/` with speaker labels:
-
-```markdown
-**Altay de Souza:** Neste episódio vamos falar sobre...
-
-**Ken Fujioka:** E como é que isso funciona?
-
-**Altay de Souza:** Então, a ciência mostra que...
-```
+> **Don't want diarization?** Use `--no-diarize`. No HuggingFace or LLM needed.
 
 ## Quality Checks
 
-After transcription, verify quality across multiple tiers:
+After transcription, verify quality:
 
 ```bash
-uv run naruhodo quality-check                          # full report (Tiers 1-2)
-uv run naruhodo quality-check --tier 2                 # episode metrics only
-uv run naruhodo quality-check --cross-validate         # VTT vs Whisper WER
-uv run naruhodo quality-check --llm-check 5            # LLM spot-check top 5 flagged
-uv run naruhodo quality-check --llm-check 5 --llm claude:opus  # best model
-uv run naruhodo quality-check --episode 400            # single episode
-uv run naruhodo quality-check --json                   # machine-readable output
+uv run naruhodo quality-check                  # Whisper signals + episode metrics
+uv run naruhodo quality-check --cross-validate # YouTube vs Whisper WER comparison
+uv run naruhodo quality-check --llm-check 5    # LLM spot-check on flagged episodes
+uv run naruhodo quality-check --json           # machine-readable output
 ```
 
-| Tier | What it checks | Cost |
-|------|----------------|------|
-| 1 | Whisper confidence signals (logprob, compression ratio, hallucination) | Free, from sidecar files |
-| 2 | Episode metrics (WPM, speaker balance, turn count, intro attribution) | Free, from transcripts |
-| 3 | Cross-validation (YouTube VTT vs Whisper WER) | Free, requires `jiwer` |
-| 4 | LLM spot-check on flagged episodes | Per-call, pluggable model |
-
-## All Commands
+## Commands
 
 | Command | Description |
 |---------|-------------|
-| `naruhodo status` | Show current sync status and cost estimates |
+| `naruhodo status` | Show current sync status |
 | `naruhodo refresh-index` | Refresh episode metadata from RSS feed |
 | `naruhodo discover-youtube` | Match YouTube playlist videos to RSS episodes |
-| `naruhodo sync` | Download YouTube auto-captions (fast, default) |
-| `naruhodo whisper` | Transcribe locally with speaker labels (MLX Whisper + pyannote) |
-| `naruhodo whisper --no-diarize` | Transcribe without speaker labels |
-| `naruhodo whisper --llm claude:sonnet` | Use Claude for speaker identification |
-| `naruhodo quality-check` | Analyze transcript quality (multi-tier) |
+| `naruhodo sync` | Download YouTube auto-captions |
+| `naruhodo whisper` | Transcribe locally with MLX Whisper |
+| `naruhodo quality-check` | Analyze transcript quality |
 
 All commands support `--help` for full flag details. Use `-v` before the subcommand for verbose output.
 
 ## Data Schema
 
-### episodes.json
+See [docs/schema.md](docs/schema.md) for the full `episodes.json` schema and structured reference format.
 
-Each episode in `data/episodes.json` has the following fields:
+## Legal
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `title` | string | Episode title from RSS feed |
-| `episode_number` | string | Episode number (e.g., "400") or empty |
-| `episode_type` | string | `"regular"`, `"interview"`, `"extra"`, or `"other"` |
-| `topic` | string | Subject extracted from title |
-| `date` | string | Publication date (YYYY-MM-DD) |
-| `duration` | string | Episode duration (HH:MM:SS) |
-| `description` | string | Clean-text episode description |
-| `raw_description` | string | Original HTML description from RSS |
-| `summary` | string | Synthesized 1-2 sentence summary |
-| `guest` | string | Guest name for interview episodes |
-| `link` | string | Podcast episode page URL |
-| `youtube_link` | string | YouTube video URL |
-| `guid` | string | RSS feed GUID (stable unique identifier) |
-| `audio_url` | string | Direct URL to the MP3 audio file |
-| `image_url` | string | Per-episode cover art URL |
-| `series` | object\|null | `{"part": N, "total": M}` for multi-part episodes |
-| `references` | array | List of external reference URLs |
-| `structured_references` | array | Classified reference objects (see below) |
+See [DATA_LICENSE.md](DATA_LICENSE.md) for licensing, usage terms, and fair-use guidance.
 
-### Structured References
-
-Each entry in `structured_references`:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `url` | string | Reference URL |
-| `domain` | string | Base domain |
-| `type` | string | `academic`, `credential`, `thesis`, `social`, `encyclopedia`, `video`, `cross_reference`, `other` |
-| `label` | string | Human-readable label (e.g., "Paper", "Wiki") |
-| `doi` | string | DOI identifier (academic refs only, optional) |
-| `pmid` | string | PubMed ID (optional) |
-
-## Legal Disclaimer
-
-### YouTube Terms of Service
-
-This tool uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) to download auto-generated captions from YouTube. While yt-dlp is widely used, be aware that:
-
-- YouTube's Terms of Service technically prohibit automated downloading
-- This tool downloads only auto-generated captions (not copyrighted audio/video)
-- Use at your own discretion and for personal/research purposes only
-
-### Copyright
-
-- **Podcast content**: Copyrighted by the Naruhodo creators
-- **Auto-generated captions**: Created by Google's ML systems
-- **Episode metadata**: Extracted from publicly available RSS feed
-
-### Fair Use
-
-Downloading transcripts may be defensible under fair use for personal research, accessibility, educational use, and text analysis.
-
-**This is not legal advice.**
+- **Code**: MIT License ([LICENSE](LICENSE))
+- **Metadata**: CC BY-NC 4.0 ([DATA_LICENSE.md](DATA_LICENSE.md))
 
 ## Attribution
 
@@ -227,15 +90,8 @@ This project is not affiliated with or endorsed by the Naruhodo podcast.
 
 ## Contributing
 
-Contributions are welcome! Please open an issue or pull request.
-
 ```bash
 uv sync --extra dev
 uv run pytest         # run tests
 uv run ruff check src # lint
 ```
-
-## License
-
-- **Code**: MIT License (see [LICENSE](LICENSE))
-- **Metadata**: See [DATA_LICENSE.md](DATA_LICENSE.md)
