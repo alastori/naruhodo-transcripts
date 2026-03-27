@@ -39,7 +39,7 @@ def load_prompt(name: str, **kwargs) -> str:
     Returns:
         Formatted prompt string
     """
-    path = PROMPTS_DIR / f"{name}.txt"
+    path = PROMPTS_DIR / f"{name}.md"
     if not path.exists():
         raise FileNotFoundError(f"Prompt template not found: {path}")
     template = path.read_text(encoding="utf-8")
