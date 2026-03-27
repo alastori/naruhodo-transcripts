@@ -5,7 +5,7 @@ Transcripts downloaded: 568
 Pending (with YouTube link): 0
 Missing YouTube link: 0
 
-Last updated: 2026-03-25 16:30:13
+Last updated: 2026-03-26 21:39:41
 
 ## Episodes
 
