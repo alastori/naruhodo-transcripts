@@ -271,7 +271,11 @@ def load_diarization_pipeline():
                 token=hf_token,
             )
 
-        # CPU is the safe default. MPS has known timestamp issues in pyannote 4.0.
+        # MPS (Apple Silicon GPU) is safe with community-1 on pyannote 4.0
+        import torch
+        if torch.backends.mps.is_available():
+            pipeline = pipeline.to(torch.device("mps"))
+
         return pipeline
 
     except ImportError:
