@@ -21,6 +21,9 @@ logger = logging.getLogger("naruhodo")
 _RE_EPISODE_NUMBER = re.compile(r"#(\d+)")
 _RE_UNSAFE_CHARS = re.compile(r'[<>"/\\|*/]')
 
+# Import shared naming
+from .config import episode_filename, episode_key
+
 
 @dataclass
 class RetryConfig:
@@ -91,25 +94,38 @@ class TranscriptDownloader:
         safe = _RE_UNSAFE_CHARS.sub("", safe)
         return safe[:100]
 
-    def get_output_filename(self, video_id: str, title: str, index: int) -> str:
+    def get_output_filename(self, video_id: str, title: str, index: int, episode: dict = None) -> str:
         """Generate output filename for transcript.
 
-        Uses episode number from title for stable prefix across sync runs.
-        Falls back to sequential index for titles without episode numbers.
+        Uses episode_key (N400, E050, etc.) when episode dict is available.
+        Falls back to old prefix scheme for backward compatibility.
         """
+        if episode:
+            return episode_filename(episode, f".{self.language}.vtt")
+
+        # Legacy fallback (no episode dict)
         safe_title = self._sanitize_title(title)
-        # Use episode number for stable, deterministic prefix
         num_match = _RE_EPISODE_NUMBER.search(title)
         prefix = f"{int(num_match.group(1)):03d}" if num_match else f"{index:03d}"
         return f"{prefix} - {safe_title}.{self.language}.vtt"
 
-    def _find_existing_transcript(self, title: str) -> Optional[Path]:
+    def _find_existing_transcript(self, title: str, episode: dict = None) -> Optional[Path]:
         """Check if a transcript for this title already exists, regardless of naming scheme.
 
         Uses cached directory listing to avoid O(n*m) filesystem scans during sync.
+        Searches by episode key prefix (new naming) then title (old naming).
         """
+        # New naming: search by key prefix (N400, E050, etc.)
+        if episode:
+            key = episode_key(episode)
+            if key:
+                prefix = key + " "
+                for name in self._get_vtt_names():
+                    if name.startswith(prefix):
+                        return self.output_dir / name
+
+        # Old naming: search by title content
         safe_title = self._sanitize_title(title)
-        # Also match files from old code that stripped : and ? entirely
         old_safe_title = re.sub(r'[<>:"/\\|?*]', "", title)[:100]
 
         search_parts = [f" - {safe_title}."]
@@ -127,6 +143,7 @@ class TranscriptDownloader:
         video_url: str,
         title: str,
         index: int,
+        episode: dict = None,
     ) -> DownloadResult:
         """Download transcript for a single video with retry logic."""
         video_id = self.extract_video_id(video_url)
@@ -137,11 +154,11 @@ class TranscriptDownloader:
                 error=f"Could not extract video ID from: {video_url}",
             )
 
-        output_filename = self.get_output_filename(video_id, title, index)
+        output_filename = self.get_output_filename(video_id, title, index, episode=episode)
         output_path = self.output_dir / output_filename
 
         # Check if already downloaded (exact path or title-based fallback for old naming)
-        existing = output_path if output_path.exists() else self._find_existing_transcript(title)
+        existing = output_path if output_path.exists() else self._find_existing_transcript(title, episode=episode)
         if existing:
             logger.debug("Already downloaded: %s", existing.name)
             return DownloadResult(
@@ -332,7 +349,7 @@ def sync_transcripts(
             continue
 
         title = episode.get("title", f"Episode {i}")
-        result = downloader.download_transcript(youtube_link, title, i)
+        result = downloader.download_transcript(youtube_link, title, i, episode=episode)
 
         if result.success:
             results["downloaded"] += 1

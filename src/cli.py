@@ -322,7 +322,7 @@ def cmd_diarize(args):
             continue
 
         # Check for existing transcript (whisper.md or vtt)
-        transcript_path = _find_transcript(ep_num, ep.get("title", ""))
+        transcript_path = _find_transcript(ep_num, ep.get("title", ""), episode=ep)
         if not transcript_path:
             continue
 
@@ -447,24 +447,35 @@ def cmd_diarize(args):
     return 0 if results["failed"] == 0 else 1
 
 
-def _find_transcript(ep_num: str, title: str):
+def _find_transcript(ep_num: str, title: str, episode: dict = None):
     """Find a transcript file for an episode (whisper.md or vtt).
 
-    Uses a word-boundary regex to avoid matching #5 against #50.
+    Searches by episode key prefix (N400, E050) first, then falls back
+    to episode number word-boundary match for old naming scheme.
     """
     import re
+    from .config import episode_key
 
     if not TRANSCRIPTS_DIR.exists():
         return None
 
+    # Try new naming scheme (key prefix)
+    if episode:
+        key = episode_key(episode)
+        if key:
+            for f in TRANSCRIPTS_DIR.iterdir():
+                if f.name.startswith(key + " ") and f.name.endswith(".whisper.md"):
+                    return f
+            for f in TRANSCRIPTS_DIR.iterdir():
+                if f.name.startswith(key + " ") and f.suffix == ".vtt":
+                    return f
+
+    # Fall back to old naming scheme (episode number in title)
     pattern = re.compile(rf"#\b{re.escape(ep_num)}\b")
 
-    # Prefer whisper.md (higher quality)
     for f in TRANSCRIPTS_DIR.iterdir():
         if f.name.endswith(".whisper.md") and pattern.search(f.name):
             return f
-
-    # Fall back to VTT
     for f in TRANSCRIPTS_DIR.iterdir():
         if f.suffix == ".vtt" and pattern.search(f.name):
             return f

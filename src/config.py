@@ -39,3 +39,87 @@ KNOWN_SPEAKERS = {"Ken Fujioka", "Altay de Souza"}
 QUALITY_MEAN_LOGPROB_THRESHOLD = -0.8
 QUALITY_REPEATED_6GRAMS_THRESHOLD = 5
 QUALITY_MIN_SPEAKER_TURNS = 10
+
+
+# --- Episode naming ---
+
+import re
+
+_RE_UNSAFE_FILENAME = re.compile(r'[<>"/\\|*/]')
+
+
+def episode_key(ep: dict) -> str:
+    """Generate a stable key prefix for an episode: N400, E050, X010, R035.
+
+    Used in filenames, lookups, and cross-referencing.
+    """
+    title = ep.get("title", "")
+    ep_num = ep.get("episode_number", "")
+    ep_type = ep.get("episode_type", "")
+
+    if not ep_num:
+        # Extract from title as fallback
+        match = re.search(r"#(\d+)", title)
+        ep_num = match.group(1) if match else ""
+
+    # REPLAY/REPOST override: check title regardless of ep_type
+    # because rss_parser classifies REPLAYs as "regular" (they match #N pattern)
+    if "REPLAY" in title or "REPOST" in title:
+        ep_type = "replay"
+    elif not ep_type:
+        if "Entrevista" in title:
+            ep_type = "interview"
+        elif "Extra" in title:
+            ep_type = "extra"
+        else:
+            ep_type = "regular"
+
+    prefix_map = {
+        "regular": "N",
+        "interview": "E",
+        "extra": "X",
+        "replay": "R",
+        "other": "O",
+    }
+    letter = prefix_map.get(ep_type, "O")
+
+    if ep_num:
+        return f"{letter}{int(ep_num):03d}"
+    return ""
+
+
+def episode_filename(ep: dict, extension: str = "") -> str:
+    """Generate a clean filename for an episode.
+
+    Examples:
+        N400 - Por que gostamos de música.pt.vtt
+        E050 - Dr. Maria Santos.whisper.md
+        X010 - Mobilidade elétrica.whisper.md
+        R035 - Pessoas absorvem energia.pt.vtt
+    """
+    key = episode_key(ep)
+    if not key:
+        # Fallback for episodes without a number
+        title = ep.get("title", "Unknown")
+        safe = _sanitize_for_filename(title)
+        return f"{safe}{extension}"
+
+    topic = ep.get("topic", "")
+    if not topic:
+        # Derive from title
+        title = ep.get("title", "")
+        # Strip "Naruhodo #N - " or "Naruhodo Entrevista #N: " prefix
+        topic = re.sub(
+            r"^(?:REPLAY[:\s]*)?(?:REPOST[:\s]*)?Naruhodo\s*(?:Entrevista\s*|Extra\s*)?#?\d*\s*[-:\s]*",
+            "", title, flags=re.IGNORECASE,
+        ).strip()
+
+    safe_topic = _sanitize_for_filename(topic)
+    return f"{key} - {safe_topic}{extension}"
+
+
+def _sanitize_for_filename(text: str) -> str:
+    """Sanitize text for safe use in filenames."""
+    safe = text.replace(":", "\uff1a").replace("?", "\uff1f")
+    safe = _RE_UNSAFE_FILENAME.sub("", safe)
+    return safe[:80]

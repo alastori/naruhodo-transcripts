@@ -31,23 +31,26 @@ def get_downloaded_episodes(transcripts_dir: Path) -> tuple[set[str], set[str]]:
             continue
         filename = f.name
 
-        # Extract regular episode number (Naruhodo #XXX)
+        # New naming: N400, E050, X010, R035 prefix
+        key_match = re.match(r"^([NEXRO])(\d{3})\s", filename)
+        if key_match:
+            downloaded_numbers.add(f"{key_match.group(1)}{int(key_match.group(2))}")
+
+        # Old naming: extract from "Naruhodo #XXX" in filename
         match = re.search(r"Naruhodo\s+#(\d+)", filename)
         if match:
             downloaded_numbers.add(f"N{match.group(1)}")
 
-        # Extract interview episode number (Entrevista #XX)
         match = re.search(r"Entrevista\s+#(\d+)", filename)
         if match:
             downloaded_numbers.add(f"E{match.group(1)}")
 
-        # Extract extra episode number (Extra #XX)
         match = re.search(r"Extra\s+#(\d+)", filename)
         if match:
             downloaded_numbers.add(f"X{match.group(1)}")
 
-        # Store normalized title for fallback matching (.vtt or .whisper.md)
-        title_match = re.match(r"\d+ - (.+?)(?:\.[a-z]{2}\.vtt|\.whisper\.md)$", filename)
+        # Store normalized title for fallback matching
+        title_match = re.match(r"(?:[NEXRO]\d{3}|\d+) - (.+?)(?:\.[a-z]{2}\.vtt|\.whisper\.md)$", filename)
         if title_match:
             title = title_match.group(1)
             title = title.replace("\uff1a", ":").replace("\uff1f", "?").replace("\uff01", "!")

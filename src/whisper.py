@@ -64,6 +64,14 @@ def _transcript_exists(ep: dict) -> bool:
     """Check if a transcript already exists for this episode (.vtt or .md)."""
     if not TRANSCRIPTS_DIR.exists():
         return False
+    from .config import episode_key
+    key = episode_key(ep)
+    if key:
+        # Match by episode key prefix (N400, E050, etc.)
+        for f in TRANSCRIPTS_DIR.iterdir():
+            if f.suffix in (".md", ".vtt") and f.name.startswith(key + " "):
+                return True
+    # Fallback: match by title substring (for old naming scheme)
     safe_title = sanitize_filename(ep.get("title", ""))
     search = safe_title[:50]
     for f in TRANSCRIPTS_DIR.iterdir():
@@ -81,11 +89,8 @@ def sanitize_filename(title: str) -> str:
 
 def get_output_filename(ep: dict) -> str:
     """Generate output filename for Whisper transcript."""
-    title = ep.get("title", "Unknown")
-    safe_title = sanitize_filename(title)
-    num_match = re.search(r"#(\d+)", title)
-    prefix = f"{int(num_match.group(1)):03d}" if num_match else "000"
-    return f"{prefix} - {safe_title}.whisper.md"
+    from .config import episode_filename
+    return episode_filename(ep, ".whisper.md")
 
 
 def format_duration(seconds: float) -> str:
