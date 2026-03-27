@@ -75,14 +75,14 @@ Prompt templates are in `prompts/` and can be edited without changing code.
 ## Usage
 
 ```bash
-# With diarization (default when diarize extra is installed)
-uv run naruhodo whisper --yes
+# Diarize all unlabeled transcripts
+uv run naruhodo diarize --yes
 
 # Specific episode
-uv run naruhodo whisper --episode 400 --yes
+uv run naruhodo diarize --episode 400 --yes
 
-# Skip diarization
-uv run naruhodo whisper --no-diarize --yes
+# Transcribe without diarization (plain text only)
+uv run naruhodo transcribe --source whisper --yes
 ```
 
 ## How It Works

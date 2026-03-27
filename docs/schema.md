@@ -64,6 +64,7 @@ Each entry in the `structured_references` array:
   "date": "2024-01-15",
   "duration": "01:12:45",
   "description": "Full episode description...",
+  "raw_description": "<p>Original HTML description from RSS...</p>",
   "summary": "Exploramos a psicologia por trás de nossa fascinação com listas.",
   "guest": "",
   "link": "https://naruhodo.b9.com.br/...",
