@@ -351,13 +351,15 @@ def cmd_whisper(args):
         print("Install with: uv sync --extra whisper")
         return 1
 
+    from .diarization import load_diarization_pipeline, add_diarization_to_transcript
+
     configure_logging(verbose=args.verbose)
 
     # Load diarization pipeline early if requested (fail fast)
     diarization_pipeline = None
     if not args.no_diarize:
         print("Loading diarization pipeline...")
-        diarization_pipeline = wh.load_diarization_pipeline()
+        diarization_pipeline = load_diarization_pipeline()
         if diarization_pipeline is None:
             print("Error: could not load diarization pipeline.")
             print("Install: uv sync --extra diarize")
@@ -481,7 +483,7 @@ def cmd_whisper(args):
             print(f"    Diarizing {speaker_label}...")
             t1 = time.monotonic()
             try:
-                mapping = wh.add_diarization_to_transcript(
+                mapping = add_diarization_to_transcript(
                     output_path, audio_path, diarization_pipeline,
                     whisper_segments=result.get("segments", []),
                     llm_spec=args.llm,
