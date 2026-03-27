@@ -9,7 +9,7 @@ Check for these issues:
 4. Does the overall speaking balance make sense for this episode type?
 
 Respond ONLY with valid JSON:
-{"quality": "good" or "suspect" or "bad", "issues": ["list of specific problems found"], "speaker_balance_reasonable": true or false, "intro_attribution_correct": true or false or "not_found"}
+{{"quality": "good" or "suspect" or "bad", "issues": ["list of specific problems found"], "speaker_balance_reasonable": true or false, "intro_attribution_correct": true or false or "not_found"}}
 
 Transcript:
 {transcript}

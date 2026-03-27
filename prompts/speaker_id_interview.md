@@ -7,7 +7,7 @@ The speakers are:
 The transcript has anonymous speaker labels. Based on the content, speaking patterns, and any introductions, determine which label corresponds to which person.
 
 Respond ONLY with valid JSON:
-{"SPEAKER_00": "Ken Fujioka" or "{guest_name}", "SPEAKER_01": "Ken Fujioka" or "{guest_name}", "confidence": "high" or "medium" or "low", "evidence": "brief explanation"}
+{{"SPEAKER_00": "Ken Fujioka" or "{guest_name}", "SPEAKER_01": "Ken Fujioka" or "{guest_name}", "confidence": "high" or "medium" or "low", "evidence": "brief explanation"}}
 
 Transcript:
 {transcript}

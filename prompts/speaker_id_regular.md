@@ -11,7 +11,7 @@ Some episodes also feature:
 The transcript has anonymous speaker labels (SPEAKER_00, SPEAKER_01). Based on the content, speaking patterns, and any self-introductions, determine which label corresponds to which person. Use actual names when you can identify them.
 
 Respond ONLY with valid JSON:
-{"SPEAKER_00": "name", "SPEAKER_01": "name", "confidence": "high" or "medium" or "low", "evidence": "brief explanation"}
+{{"SPEAKER_00": "name", "SPEAKER_01": "name", "confidence": "high" or "medium" or "low", "evidence": "brief explanation"}}
 
 Transcript:
 {transcript}
