@@ -1,9 +1,20 @@
 """Pluggable LLM interface for speaker identification and quality checks.
 
-Supports multiple backends:
-    ollama:model_name       Local Ollama (default)
-    claude:model_alias      Claude CLI (sonnet, opus, haiku)
-    openai:model_name       OpenAI API (gpt-4o, gpt-4o-mini, etc.)
+Supports multiple backends via --llm flag:
+    ollama:model_name       Local Ollama (default: qwen2.5:72b-instruct-q4_K_M)
+    claude:model_alias      Claude CLI (uses your Claude subscription)
+    codex:model_name        OpenAI Codex CLI (uses your ChatGPT subscription)
+    openai:model_name       OpenAI API (requires OPENAI_API_KEY, pay-per-token)
+
+Subscription-based (flat fee):
+    claude:sonnet           Uses Claude Code CLI + your Claude subscription
+    codex:o3                Uses Codex CLI + your ChatGPT Plus/Pro subscription
+
+API-based (pay-per-token):
+    openai:gpt-4o           Uses OpenAI API + OPENAI_API_KEY
+
+Local (free):
+    ollama:qwen2.5:72b      Uses local Ollama server
 
 Usage:
     from src.llm import llm_call, load_prompt
@@ -11,16 +22,13 @@ Usage:
     prompt = load_prompt("speaker_id_regular", transcript=text)
     result = llm_call("ollama:qwen2.5:72b", prompt)
     result = llm_call("claude:sonnet", prompt)
-    result = llm_call("openai:gpt-4o", prompt)
-
-OpenAI auth: set OPENAI_API_KEY env var.
+    result = llm_call("codex:o3", prompt)
 """
 
 import json
 import logging
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from .config import DEFAULT_LLM
 
@@ -37,13 +45,6 @@ def load_prompt(name: str, **kwargs) -> str:
 
     Uses format_map with a defaultdict to safely handle stray braces that
     may appear in user-supplied values (e.g., guest names containing '{' or '}').
-
-    Args:
-        name: Prompt filename without extension (e.g., "speaker_id_regular")
-        **kwargs: Variables to substitute in the template
-
-    Returns:
-        Formatted prompt string
     """
     from collections import defaultdict
 
@@ -60,10 +61,11 @@ def parse_llm_spec(spec: str) -> tuple:
     Examples:
         "ollama:qwen2.5:72b"     -> ("ollama", "qwen2.5:72b")
         "claude:sonnet"          -> ("claude", "sonnet")
+        "codex:o3"               -> ("codex", "o3")
         "openai:gpt-4o"          -> ("openai", "gpt-4o")
-        "qwen2.5:72b"           -> ("ollama", "qwen2.5:72b")  # default provider
+        "qwen2.5:72b"           -> ("ollama", "qwen2.5:72b")
     """
-    for prefix in ("claude:", "ollama:", "openai:"):
+    for prefix in ("claude:", "ollama:", "codex:", "openai:"):
         if spec.startswith(prefix):
             return prefix[:-1], spec[len(prefix):]
     # Default to ollama for bare model names
@@ -78,15 +80,12 @@ def llm_call(
     """Call an LLM and parse JSON response.
 
     Args:
-        llm_spec: Provider:model string (e.g., "ollama:qwen2.5:72b", "claude:sonnet")
+        llm_spec: Provider:model string
         prompt: The full prompt to send
         timeout: Timeout in seconds
 
     Returns:
         Parsed JSON dict from the LLM response
-
-    Raises:
-        RuntimeError: If the LLM call fails or returns invalid JSON
     """
     provider, model = parse_llm_spec(llm_spec)
 
@@ -94,6 +93,8 @@ def llm_call(
         raw = _call_ollama(model, prompt, timeout)
     elif provider == "claude":
         raw = _call_claude(model, prompt, timeout)
+    elif provider == "codex":
+        raw = _call_codex(model, prompt, timeout)
     elif provider == "openai":
         raw = _call_openai(model, prompt, timeout)
     else:
@@ -120,7 +121,7 @@ def _call_ollama(model: str, prompt: str, timeout: int) -> str:
 
 
 def _call_claude(model: str, prompt: str, timeout: int) -> str:
-    """Call Claude CLI and return raw response text."""
+    """Call Claude CLI (uses your Claude subscription)."""
     cmd = [
         "claude",
         "-p",
@@ -132,35 +133,67 @@ def _call_claude(model: str, prompt: str, timeout: int) -> str:
     ]
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if result.returncode != 0:
             raise RuntimeError(f"Claude CLI error: {result.stderr[:200]}")
         return result.stdout
     except FileNotFoundError:
         raise RuntimeError(
-            "Claude CLI not found. Install from https://claude.ai/claude-code"
+            "Claude CLI not found. Install from https://claude.ai/download"
         ) from None
     except subprocess.TimeoutExpired:
         raise RuntimeError(f"Claude CLI timed out after {timeout}s") from None
 
 
-def _call_openai(model: str, prompt: str, timeout: int) -> str:
-    """Call OpenAI API and return raw response text.
+def _call_codex(model: str, prompt: str, timeout: int) -> str:
+    """Call OpenAI Codex CLI (uses your ChatGPT subscription via OAuth).
 
-    Auth: OPENAI_API_KEY env var.
+    Note: ChatGPT subscription only supports Codex-specific models.
+    The default model from ~/.codex/config.toml is used if model is "default".
     """
+    cmd = ["codex", "exec", "--json"]
+    if model and model != "default":
+        cmd.extend(["--model", model])
+    cmd.append(prompt)
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        # Codex --json outputs NDJSON (one JSON object per line)
+        # Find the agent_message item with the response text
+        for line in result.stdout.strip().split("\n"):
+            try:
+                event = json.loads(line)
+                if event.get("type") == "item.completed":
+                    item = event.get("item", {})
+                    if item.get("type") == "agent_message":
+                        return item.get("text", "")
+                if event.get("type") == "error":
+                    raise RuntimeError(f"Codex error: {event.get('message', '')[:200]}")
+            except json.JSONDecodeError:
+                continue
+        # If no agent_message found, check for errors
+        if result.returncode != 0:
+            raise RuntimeError(f"Codex CLI error: {result.stderr[:200]}")
+        return result.stdout
+    except FileNotFoundError:
+        raise RuntimeError(
+            "Codex CLI not found. Install: npm install -g @openai/codex\n"
+            "Then authenticate: codex login"
+        ) from None
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"Codex CLI timed out after {timeout}s") from None
+
+
+def _call_openai(model: str, prompt: str, timeout: int) -> str:
+    """Call OpenAI API (requires OPENAI_API_KEY, pay-per-token)."""
     import os
     import requests
 
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError(
-            "OPENAI_API_KEY not set. Get one at https://platform.openai.com/api-keys"
+            "OPENAI_API_KEY not set. Get one at https://platform.openai.com/api-keys\n"
+            "For subscription-based access, use codex: instead (e.g., --llm codex:o3)"
         )
 
     try:
@@ -177,9 +210,9 @@ def _call_openai(model: str, prompt: str, timeout: int) -> str:
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
     except KeyError:
-        raise RuntimeError(f"Unexpected OpenAI response format") from None
+        raise RuntimeError("Unexpected OpenAI response format") from None
     except Exception as e:
-        raise RuntimeError(f"OpenAI call failed ({model}): {e}") from e
+        raise RuntimeError(f"OpenAI API call failed ({model}): {e}") from e
 
 
 def _parse_json_response(raw: str) -> dict:
@@ -187,7 +220,6 @@ def _parse_json_response(raw: str) -> dict:
     raw = raw.strip()
     # Handle markdown code blocks
     if "```" in raw:
-        # Extract content between first ``` pair
         parts = raw.split("```")
         if len(parts) >= 3:
             raw = parts[1]

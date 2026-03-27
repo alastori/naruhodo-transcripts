@@ -29,20 +29,48 @@ uv sync --extra diarize
 
 The speaker identification step uses an LLM to determine which anonymous speaker label (SPEAKER_00, SPEAKER_01) corresponds to Ken Fujioka vs Altay de Souza. This is pluggable via `--llm`:
 
+### Option A: Ollama (local, free, default)
+
 ```bash
-# Option A: Ollama (local, free, default)
 ollama pull qwen2.5:72b-instruct-q4_K_M
-# Ollama must be running: launch the app or run `ollama serve`
-naruhodo whisper --llm ollama:qwen2.5:72b-instruct-q4_K_M
-
-# Option B: Claude CLI
-naruhodo whisper --llm claude:sonnet
-
-# Option C: Claude Opus (highest quality, for verification)
-naruhodo whisper --llm claude:opus
+ollama serve   # or launch the Ollama app
+naruhodo diarize   # uses Ollama by default
 ```
 
-The default is Ollama. Prompt templates are in `prompts/` and can be edited without changing code.
+We recommend `qwen2.5:72b-instruct-q4_K_M` for the best balance of quality and speed on Apple Silicon. You can use any Ollama model: `--llm ollama:your-model`.
+
+### Option B: Codex CLI (ChatGPT subscription)
+
+Uses your ChatGPT Plus/Pro subscription (flat fee, no per-token cost).
+
+```bash
+npm install -g @openai/codex
+codex login   # authenticates via your ChatGPT account in the browser
+naruhodo diarize --llm codex:default   # uses your configured model
+```
+
+The Codex CLI uses the model configured in `~/.codex/config.toml`. ChatGPT subscriptions only support Codex-specific models (not arbitrary GPT models).
+
+### Option C: Claude CLI (Claude subscription)
+
+Uses your Claude subscription (flat fee, no per-token cost).
+
+```bash
+# Claude CLI comes with Claude Code: https://claude.ai/download
+naruhodo diarize --llm claude:sonnet
+naruhodo diarize --llm claude:opus   # highest quality
+```
+
+### Option D: OpenAI API (pay-per-token)
+
+For users with an OpenAI API key (billed separately from ChatGPT subscription).
+
+```bash
+export OPENAI_API_KEY="sk-..."
+naruhodo diarize --llm openai:gpt-4o
+```
+
+Prompt templates are in `prompts/` and can be edited without changing code.
 
 ## Usage
 

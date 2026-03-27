@@ -26,7 +26,10 @@ See **[Data Schema](docs/schema.md)** for the full field reference and a sample 
 > **Optional**, for speaker labeling (diarization):
 > - All Whisper prerequisites above
 > - Free [HuggingFace](https://huggingface.co/join) account with accepted model terms ([details](docs/diarization-setup.md))
-> - An LLM: [Ollama](https://ollama.com) (local, free) or Claude CLI
+> - An LLM for speaker identification (pick one):
+>   - [Ollama](https://ollama.com) with `qwen2.5:72b` (local, free, **default**)
+>   - [Codex CLI](https://github.com/openai/codex) (uses your ChatGPT Plus/Pro subscription)
+>   - [Claude CLI](https://claude.ai/download) (uses your Claude subscription)
 
 ## Quick Start
 
@@ -81,9 +84,10 @@ Naruhodo is a conversation between two hosts. The diarize stage figures out who 
 > **Ken Fujioka:** But wait, there's a second experiment...
 
 ```bash
-naruhodo diarize                             # label all unlabeled transcripts
+naruhodo diarize                             # uses Ollama (default)
+naruhodo diarize --llm codex:default              # use ChatGPT subscription
+naruhodo diarize --llm claude:sonnet         # use Claude subscription
 naruhodo diarize --episode 400               # specific episode
-naruhodo diarize --llm claude:sonnet         # use Claude for speaker identification
 naruhodo diarize --force                     # re-label already labeled transcripts
 ```
 
