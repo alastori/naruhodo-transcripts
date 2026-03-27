@@ -17,7 +17,6 @@ def sample_episode():
         "guest": "",
         "link": "https://naruhodo.b9.com.br/naruhodo-400",
         "youtube_link": "https://www.youtube.com/watch?v=abc123def45",
-        "status": "⬜ Pending",
         "references": ["https://doi.org/10.1000/example"],
     }
 
@@ -35,7 +34,6 @@ def sample_interview():
         "guest": "Dr. Maria Santos - Neurociência e Comportamento",
         "link": "https://naruhodo.b9.com.br/entrevista-50",
         "youtube_link": "https://www.youtube.com/watch?v=xyz789abc12",
-        "status": "⬜ Pending",
         "references": ["https://lattes.cnpq.br/1234567890"],
     }
 

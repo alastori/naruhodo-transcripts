@@ -701,7 +701,6 @@ def parse_rss(content: str) -> list[dict]:
             "audio_url": audio_url,
             "image_url": image_url,
             "series": detect_series(title_text),
-            "status": "\u2b1c Pending",
             "references": extract_references(description_text),
             "structured_references": extract_structured_references(description_text),
         }
@@ -745,8 +744,13 @@ def load_episodes(path: Path) -> list[dict]:
 
 
 def save_episodes(episodes: list[dict], path: Path) -> None:
-    """Save episodes to JSON file atomically."""
-    content = json.dumps(episodes, ensure_ascii=False, indent=2)
+    """Save episodes to JSON file atomically.
+
+    Strips the 'status' field which is a runtime-only computed value,
+    not persistent metadata.
+    """
+    clean = [{k: v for k, v in ep.items() if k != "status"} for ep in episodes]
+    content = json.dumps(clean, ensure_ascii=False, indent=2)
     _atomic_write(path, content)
 
 
@@ -787,8 +791,7 @@ def merge_episodes(existing: list[dict], new: list[dict]) -> list[dict]:
             old = existing_by_title[title]
 
         if old:
-            # Preserve user-managed fields from existing
-            ep["status"] = old.get("status", ep["status"])
+            # Preserve youtube_link from existing data
             ep["youtube_link"] = old.get("youtube_link", ep.get("youtube_link", ""))
 
         backfill_episode_fields(ep)

@@ -528,6 +528,21 @@ def cmd_whisper(args):
     return 0 if results["failed"] == 0 else 1
 
 
+def cmd_quality_check(args):
+    """Analyze transcript quality."""
+    configure_logging(verbose=args.verbose)
+
+    from .quality import run_quality_check
+    return run_quality_check(
+        tier=args.tier,
+        cross_validate=args.cross_validate,
+        llm_check=args.llm_check or 0,
+        llm_spec=args.llm,
+        episode=args.episode,
+        as_json=args.json,
+    )
+
+
 def ensure_directories():
     """Create required directories if they don't exist."""
     TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -628,6 +643,37 @@ def main():
         help="Keep downloaded audio files after transcription",
     )
     whisper_parser.set_defaults(func=cmd_whisper)
+
+    # quality-check command
+    quality_parser = subparsers.add_parser(
+        "quality-check",
+        help="Analyze transcript quality (multi-tier)",
+    )
+    quality_parser.add_argument(
+        "--tier", type=int, choices=[1, 2, 3, 4],
+        help="Run specific tier only (1=Whisper signals, 2=episode metrics, 3=cross-validate, 4=LLM)",
+    )
+    quality_parser.add_argument(
+        "--cross-validate", action="store_true",
+        help="Run Tier 3: VTT vs Whisper WER comparison",
+    )
+    quality_parser.add_argument(
+        "--llm-check", type=int, metavar="N",
+        help="Tier 4: LLM spot-check top N flagged episodes",
+    )
+    quality_parser.add_argument(
+        "--llm", type=str, default="claude:sonnet",
+        help="LLM for Tier 4 (e.g., claude:sonnet, ollama:qwen2.5:72b)",
+    )
+    quality_parser.add_argument(
+        "--episode", type=str,
+        help="Check a specific episode",
+    )
+    quality_parser.add_argument(
+        "--json", action="store_true",
+        help="Output as JSON",
+    )
+    quality_parser.set_defaults(func=cmd_quality_check)
 
     args = parser.parse_args()
 

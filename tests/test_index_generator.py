@@ -240,11 +240,9 @@ class TestGenerateIndexMarkdown:
         content = generate_index_markdown([sample_episode], 1, 0, 0)
         assert "# Naruhodo Podcast - Episode Index" in content
 
-    def test_includes_counts(self, sample_episode):
-        content = generate_index_markdown([sample_episode], 1, 5, 3)
-        assert "Transcripts downloaded: 1" in content
-        assert "Pending (with YouTube link): 5" in content
-        assert "Missing YouTube link: 3" in content
+    def test_includes_episode_count(self, sample_episode):
+        content = generate_index_markdown([sample_episode])
+        assert "Total episodes: 1" in content
 
     def test_includes_table_header(self, sample_episode):
         content = generate_index_markdown([sample_episode], 1, 0, 0)

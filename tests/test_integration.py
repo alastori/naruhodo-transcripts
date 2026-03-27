@@ -89,7 +89,7 @@ class TestFullWorkflow:
         # Verify index content
         index_text = workspace["episode_index"].read_text()
         assert "Naruhodo #100" in index_text
-        assert "Missing YouTube link: 2" in index_text
+        assert "Total episodes: 2" in index_text
 
     def test_youtube_matching_workflow(self, workspace):
         """Test workflow for matching YouTube links to episodes."""
@@ -180,13 +180,12 @@ class TestFullWorkflow:
         assert episodes[1]["status"] == "⬜ Pending"
 
     def test_preserves_existing_data_on_merge(self, workspace):
-        """Test that merging preserves status and YouTube links."""
+        """Test that merging preserves YouTube links from existing."""
         from src.rss_parser import merge_episodes
 
         existing = [
             {
                 "title": "Episode 1",
-                "status": "✅ Downloaded",
                 "youtube_link": "https://youtube.com/existing",
             }
         ]
@@ -194,13 +193,11 @@ class TestFullWorkflow:
         new = [
             {
                 "title": "Episode 1",
-                "status": "⬜ Pending",
                 "youtube_link": "",
             }
         ]
 
         merged = merge_episodes(existing, new)
 
-        # Status and YouTube link should be preserved from existing
-        assert merged[0]["status"] == "✅ Downloaded"
+        # YouTube link should be preserved from existing
         assert merged[0]["youtube_link"] == "https://youtube.com/existing"

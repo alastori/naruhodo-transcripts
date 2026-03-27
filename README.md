@@ -64,24 +64,28 @@ brew install ffmpeg
 uv sync --extra diarize   # includes Whisper + speaker diarization
 ```
 
-Speaker diarization (labeling who says what — Ken Fujioka vs Altay de Souza) is on by default. It uses [pyannote](https://github.com/pyannote/pyannote-audio) for speaker detection and [Ollama](https://ollama.com) for speaker identification. Setup:
+Speaker diarization (labeling who says what) is on by default. It uses [pyannote](https://github.com/pyannote/pyannote-audio) community-1 for speaker detection and an LLM for speaker identification. Setup:
 
 1. **Create a free HuggingFace account** at https://huggingface.co/join
-2. **Accept the pyannote model terms** (free, one-time — just click "Agree" on each page):
-   - https://huggingface.co/pyannote/speaker-diarization-3.1
+2. **Accept the pyannote model terms** (free, one-time, click "Agree" on each page):
+   - https://huggingface.co/pyannote/speaker-diarization-community-1
    - https://huggingface.co/pyannote/segmentation-3.0
 3. **Create an access token** at https://huggingface.co/settings/tokens (Read permission)
 4. **Set the token** in your environment:
    ```bash
    export HF_TOKEN="hf_your_token_here"
    ```
-5. **Install and start [Ollama](https://ollama.com)**, then pull a model for speaker identification:
+5. **Set up an LLM** for speaker identification (pluggable, pick one):
    ```bash
+   # Option A: Ollama (local, free)
    ollama pull qwen2.5:72b-instruct-q4_K_M
-   ```
-   Ollama must be running when you use `naruhodo whisper` (launch the app or run `ollama serve`).
+   # Ollama must be running: launch the app or run `ollama serve`
 
-> **Don't want to set up diarization?** Use `--no-diarize` to skip it and just get plain transcripts — no HuggingFace account or Ollama needed.
+   # Option B: Claude CLI (higher quality)
+   # Uses your existing Claude Code installation
+   ```
+
+> **Don't want to set up diarization?** Use `--no-diarize` to skip it and just get plain transcripts. No HuggingFace account or LLM needed.
 
 ### Usage
 
@@ -100,6 +104,9 @@ uv run naruhodo whisper --yes
 
 # Skip diarization (transcription only, no speaker labels)
 uv run naruhodo whisper --no-diarize --yes
+
+# Use Claude instead of Ollama for speaker identification
+uv run naruhodo whisper --llm claude:sonnet --yes
 ```
 
 Transcripts are saved as `.whisper.md` in `data/transcripts/` with speaker labels:
@@ -112,6 +119,27 @@ Transcripts are saved as `.whisper.md` in `data/transcripts/` with speaker label
 **Altay de Souza:** Então, a ciência mostra que...
 ```
 
+## Quality Checks
+
+After transcription, verify quality across multiple tiers:
+
+```bash
+uv run naruhodo quality-check                          # full report (Tiers 1-2)
+uv run naruhodo quality-check --tier 2                 # episode metrics only
+uv run naruhodo quality-check --cross-validate         # VTT vs Whisper WER
+uv run naruhodo quality-check --llm-check 5            # LLM spot-check top 5 flagged
+uv run naruhodo quality-check --llm-check 5 --llm claude:opus  # best model
+uv run naruhodo quality-check --episode 400            # single episode
+uv run naruhodo quality-check --json                   # machine-readable output
+```
+
+| Tier | What it checks | Cost |
+|------|----------------|------|
+| 1 | Whisper confidence signals (logprob, compression ratio, hallucination) | Free, from sidecar files |
+| 2 | Episode metrics (WPM, speaker balance, turn count, intro attribution) | Free, from transcripts |
+| 3 | Cross-validation (YouTube VTT vs Whisper WER) | Free, requires `jiwer` |
+| 4 | LLM spot-check on flagged episodes | Per-call, pluggable model |
+
 ## All Commands
 
 | Command | Description |
@@ -122,6 +150,8 @@ Transcripts are saved as `.whisper.md` in `data/transcripts/` with speaker label
 | `naruhodo sync` | Download YouTube auto-captions (fast, default) |
 | `naruhodo whisper` | Transcribe locally with speaker labels (MLX Whisper + pyannote) |
 | `naruhodo whisper --no-diarize` | Transcribe without speaker labels |
+| `naruhodo whisper --llm claude:sonnet` | Use Claude for speaker identification |
+| `naruhodo quality-check` | Analyze transcript quality (multi-tier) |
 
 All commands support `--help` for full flag details. Use `-v` before the subcommand for verbose output.
 
@@ -149,7 +179,6 @@ Each episode in `data/episodes.json` has the following fields:
 | `audio_url` | string | Direct URL to the MP3 audio file |
 | `image_url` | string | Per-episode cover art URL |
 | `series` | object\|null | `{"part": N, "total": M}` for multi-part episodes |
-| `status` | string | Download status emoji |
 | `references` | array | List of external reference URLs |
 | `structured_references` | array | Classified reference objects (see below) |
 

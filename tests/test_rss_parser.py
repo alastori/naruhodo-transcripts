@@ -369,9 +369,9 @@ class TestParseRss:
         assert any("doi.org" in ref for ref in episodes[0]["references"])
         assert not any("insider.com" in ref for ref in episodes[0]["references"])
 
-    def test_sets_default_status(self, sample_rss_xml):
+    def test_no_status_in_parsed_output(self, sample_rss_xml):
         episodes = parse_rss(sample_rss_xml)
-        assert episodes[0]["status"] == "⬜ Pending"
+        assert "status" not in episodes[0]
 
     def test_extracts_link(self, sample_rss_xml):
         episodes = parse_rss(sample_rss_xml)
@@ -411,16 +411,6 @@ class TestLoadSaveEpisodes:
 class TestMergeEpisodes:
     """Tests for merge_episodes function."""
 
-    def test_preserves_status(self, sample_episode):
-        existing = [sample_episode.copy()]
-        existing[0]["status"] = "✅ Downloaded"
-
-        new = [sample_episode.copy()]
-        new[0]["status"] = "⬜ Pending"
-
-        merged = merge_episodes(existing, new)
-        assert merged[0]["status"] == "✅ Downloaded"
-
     def test_preserves_youtube_link(self, sample_episode):
         existing = [sample_episode.copy()]
         existing[0]["youtube_link"] = "https://youtube.com/existing"
@@ -450,17 +440,15 @@ class TestMergeEpisodes:
     def test_updates_other_fields(self, sample_episode):
         existing = [sample_episode.copy()]
         existing[0]["summary"] = "Old summary"
-        existing[0]["status"] = "✅ Downloaded"
 
         new = [sample_episode.copy()]
         new[0]["summary"] = "New summary"
-        new[0]["status"] = "⬜ Pending"
 
         merged = merge_episodes(existing, new)
         # Summary comes from new episode
         assert merged[0]["summary"] == "New summary"
-        # Status preserved from existing
-        assert merged[0]["status"] == "✅ Downloaded"
+        # YouTube link preserved from existing
+        assert merged[0]["youtube_link"] == sample_episode["youtube_link"]
 
 
 class TestFetchRssFeed:

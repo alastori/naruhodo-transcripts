@@ -131,25 +131,24 @@ def update_episode_status(
 
 def generate_index_markdown(
     episodes: list[dict],
-    downloaded_count: int,
-    pending_count: int,
+    downloaded_count: int = 0,
+    pending_count: int = 0,
     no_link_count: int = 0,
 ) -> str:
-    """Generate markdown index content."""
+    """Generate markdown index content.
+
+    The public index contains episode metadata only, not local processing status.
+    """
     lines = [
         "# Naruhodo Podcast - Episode Index",
         "",
-        f"Total episodes in RSS feed: {len(episodes)}",
-        f"Transcripts downloaded: {downloaded_count}",
-        f"Pending (with YouTube link): {pending_count}",
-        f"Missing YouTube link: {no_link_count}",
-        "",
-        f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"Total episodes: {len(episodes)}",
+        f"Last updated: {datetime.now().strftime('%Y-%m-%d')}",
         "",
         "## Episodes",
         "",
-        "| # | Title | Date | Duration | Guest | Summary | References | Status |",
-        "|---|-------|------|----------|-------|---------|------------|--------|",
+        "| # | Title | Date | Duration | Type | Guest | Summary | References |",
+        "|---|-------|------|----------|------|-------|---------|------------|",
     ]
 
     for ep in episodes:
@@ -157,16 +156,16 @@ def generate_index_markdown(
         title = ep.get("title", "").replace("|", "\\|")
         date = ep.get("date", "")
         duration = ep.get("duration", "")
+        ep_type = ep.get("episode_type", "")
         guest = ep.get("guest", "").replace("|", "\\|")
         summary = ep.get("summary", "").replace("|", "\\|")
-        status = ep.get("status", "\u2b1c Pending")
 
         # Prefer structured references when available
         structured_refs = ep.get("structured_references")
         refs = ep.get("references", [])
         refs_md = format_references(refs, structured_refs=structured_refs)
 
-        row = f"| {num} | {title} | {date} | {duration} | {guest} | {summary} | {refs_md} | {status} |"
+        row = f"| {num} | {title} | {date} | {duration} | {ep_type} | {guest} | {summary} | {refs_md} |"
         lines.append(row)
 
     return "\n".join(lines)

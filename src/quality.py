@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Quality check for Naruhodo podcast transcripts.
 
 Analyzes transcript quality across multiple tiers:
@@ -6,26 +5,14 @@ Analyzes transcript quality across multiple tiers:
   Tier 2: Per-episode aggregate metrics
   Tier 3: Cross-validation (YouTube VTT vs Whisper, requires jiwer)
   Tier 4: LLM spot-check on flagged episodes
-
-Usage:
-    python scripts/quality_check.py                    # full report
-    python scripts/quality_check.py --tier 2           # specific tier only
-    python scripts/quality_check.py --cross-validate   # Tier 3: VTT vs Whisper
-    python scripts/quality_check.py --llm-check 5      # Tier 4: LLM check top 5 flagged
-    python scripts/quality_check.py --episode 400      # check a specific episode
 """
 
-import argparse
 import json
 import re
-import sys
 from collections import Counter
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).parent.parent
-DATA_DIR = PROJECT_ROOT / "data"
-TRANSCRIPTS_DIR = DATA_DIR / "transcripts"
-EPISODES_JSON = DATA_DIR / "episodes.json"
+from .config import DATA_DIR, EPISODES_JSON, TRANSCRIPTS_DIR
 
 KNOWN_SPEAKERS = {"Ken Fujioka", "Altay de Souza"}
 
@@ -292,8 +279,7 @@ def _extract_vtt_text(path: Path) -> str:
 
 def tier4_llm_check(episodes_to_check: list[str], llm_spec: str = "claude:sonnet"):
     """Run LLM quality check on specific episodes."""
-    sys.path.insert(0, str(PROJECT_ROOT))
-    from src.llm import llm_call, load_prompt
+    from .llm import llm_call, load_prompt
 
     results = []
     for ep_num in episodes_to_check:
@@ -397,57 +383,52 @@ def print_report(tier1, tier2, tier3, tier4):
                 print()
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Quality check for Naruhodo transcripts")
-    parser.add_argument("--tier", type=int, choices=[1, 2, 3, 4], help="Run specific tier only")
-    parser.add_argument("--cross-validate", action="store_true", help="Run Tier 3 VTT vs Whisper")
-    parser.add_argument("--llm-check", type=int, metavar="N", help="Tier 4: LLM check top N flagged")
-    parser.add_argument("--llm", type=str, default="claude:sonnet", help="LLM for Tier 4")
-    parser.add_argument("--episode", type=str, help="Check a specific episode")
-    parser.add_argument("--json", action="store_true", help="Output as JSON")
-    args = parser.parse_args()
-
+def run_quality_check(
+    tier=None,
+    cross_validate=False,
+    llm_check=0,
+    llm_spec="claude:sonnet",
+    episode=None,
+    as_json=False,
+) -> int:
+    """Run quality checks. Called from CLI."""
     tier1 = tier2 = tier3 = tier4 = []
 
-    if args.episode:
-        # Single episode mode
+    if episode:
         tier2 = tier2_episode_metrics()
-        tier2 = [r for r in tier2 if r["episode"] == args.episode]
+        tier2 = [r for r in tier2 if r["episode"] == episode]
         if tier2:
             print(json.dumps(tier2[0], indent=2))
         else:
-            print(f"Episode #{args.episode} not found in whisper transcripts")
-        return
+            print(f"Episode #{episode} not found in whisper transcripts")
+        return 0
 
-    if args.tier in (None, 1):
+    if tier in (None, 1):
         tier1 = tier1_whisper_signals()
-    if args.tier in (None, 2):
+    if tier in (None, 2):
         tier2 = tier2_episode_metrics()
-    if args.tier == 3 or args.cross_validate:
+    if tier == 3 or cross_validate:
         tier3 = tier3_cross_validate()
-    if args.tier == 4 or args.llm_check:
-        # Find flagged episodes from tier 2
+    if tier == 4 or llm_check:
         if not tier2:
             tier2 = tier2_episode_metrics()
         flagged = sorted(
             [r for r in tier2 if r["flags"]],
             key=lambda r: -len(r["flags"]),
         )
-        n = args.llm_check or 5
+        n = llm_check or 5
         episodes = [r["episode"] for r in flagged[:n]]
         if episodes:
             print(f"Running LLM check on {len(episodes)} flagged episodes...")
-            tier4 = tier4_llm_check(episodes, args.llm)
+            tier4 = tier4_llm_check(episodes, llm_spec)
         else:
             print("No flagged episodes to check.")
 
-    if args.json:
+    if as_json:
         print(json.dumps({
             "tier1": tier1, "tier2": tier2, "tier3": tier3, "tier4": tier4,
         }, indent=2, ensure_ascii=False))
     else:
         print_report(tier1, tier2, tier3, tier4)
 
-
-if __name__ == "__main__":
-    sys.exit(main() or 0)
+    return 0
