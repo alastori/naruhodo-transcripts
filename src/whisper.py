@@ -251,9 +251,11 @@ def get_hf_token() -> Optional[str]:
 
 
 def load_diarization_pipeline():
-    """Load pyannote speaker diarization pipeline. Returns None on failure."""
+    """Load pyannote speaker diarization pipeline (community-1, requires pyannote 4.0+).
+
+    Returns None on failure.
+    """
     try:
-        import torch
         import warnings
         from pyannote.audio import Pipeline
 
@@ -262,34 +264,36 @@ def load_diarization_pipeline():
             logger.error("No HuggingFace token found. Set HF_TOKEN env var.")
             return None
 
-        # PyTorch 2.6+ fix: trust pyannote model checkpoints from HuggingFace
-        _original_torch_load = torch.load
-        def _safe_torch_load(*args, **kwargs):
-            kwargs["weights_only"] = False
-            return _original_torch_load(*args, **kwargs)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            pipeline = Pipeline.from_pretrained(
+                "pyannote/speaker-diarization-community-1",
+                token=hf_token,
+            )
 
-        torch.load = _safe_torch_load
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                pipeline = Pipeline.from_pretrained(
-                    "pyannote/speaker-diarization-3.1",
-                    use_auth_token=hf_token,
-                )
-        finally:
-            torch.load = _original_torch_load
-
-        if torch.backends.mps.is_available():
-            pipeline = pipeline.to(torch.device("mps"))
-
+        # CPU is the safe default. MPS has known timestamp issues in pyannote 4.0.
         return pipeline
 
     except ImportError:
-        logger.error("pyannote.audio not installed. Run: pip install naruhodo-transcripts[diarize]")
+        logger.error("pyannote.audio not installed. Run: uv sync --extra diarize")
         return None
     except Exception as e:
         logger.error("Could not load diarization pipeline: %s", e)
         return None
+
+
+def _ensure_wav(audio_path: Path) -> Path:
+    """Convert audio to 16kHz mono WAV if needed (pyannote 4.0 is strict about sample alignment)."""
+    if audio_path.suffix == ".wav":
+        return audio_path
+    wav_path = audio_path.with_suffix(".wav")
+    if wav_path.exists():
+        return wav_path
+    subprocess.run(
+        ["ffmpeg", "-i", str(audio_path), "-ar", "16000", "-ac", "1", str(wav_path), "-y"],
+        capture_output=True, timeout=120,
+    )
+    return wav_path
 
 
 def diarize_audio(
@@ -302,14 +306,18 @@ def diarize_audio(
     Args:
         pipeline: pyannote diarization pipeline
         audio_path: Path to audio file
-        num_speakers: Expected number of speakers (2 for regular, 3 for interviews)
+        num_speakers: Expected number of speakers
 
     Returns list of (start, end, speaker) tuples.
     """
-    diarization = pipeline(str(audio_path), num_speakers=num_speakers)
+    wav_path = _ensure_wav(audio_path)
+    output = pipeline(str(wav_path), num_speakers=num_speakers)
+
+    # pyannote 4.0 returns DiarizeOutput; 3.x returned Annotation directly
+    annotation = getattr(output, "speaker_diarization", output)
     return [
         (turn.start, turn.end, speaker)
-        for turn, _, speaker in diarization.itertracks(yield_label=True)
+        for turn, _, speaker in annotation.itertracks(yield_label=True)
     ]
 
 
