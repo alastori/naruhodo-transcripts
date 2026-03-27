@@ -3,6 +3,7 @@
 Supports multiple backends:
     ollama:model_name       Local Ollama (default)
     claude:model_alias      Claude CLI (sonnet, opus, haiku)
+    openai:model_name       OpenAI API (gpt-4o, gpt-4o-mini, etc.)
 
 Usage:
     from src.llm import llm_call, load_prompt
@@ -10,6 +11,9 @@ Usage:
     prompt = load_prompt("speaker_id_regular", transcript=text)
     result = llm_call("ollama:qwen2.5:72b", prompt)
     result = llm_call("claude:sonnet", prompt)
+    result = llm_call("openai:gpt-4o", prompt)
+
+OpenAI auth: set OPENAI_API_KEY env var.
 """
 
 import json
@@ -50,19 +54,18 @@ def load_prompt(name: str, **kwargs) -> str:
     return template.format_map(defaultdict(str, **kwargs))
 
 
-def parse_llm_spec(spec: str) -> tuple[str, str]:
+def parse_llm_spec(spec: str) -> tuple:
     """Parse an LLM spec string into (provider, model).
 
     Examples:
         "ollama:qwen2.5:72b"     -> ("ollama", "qwen2.5:72b")
         "claude:sonnet"          -> ("claude", "sonnet")
-        "claude:opus"            -> ("claude", "opus")
+        "openai:gpt-4o"          -> ("openai", "gpt-4o")
         "qwen2.5:72b"           -> ("ollama", "qwen2.5:72b")  # default provider
     """
-    if spec.startswith("claude:"):
-        return "claude", spec[7:]
-    if spec.startswith("ollama:"):
-        return "ollama", spec[7:]
+    for prefix in ("claude:", "ollama:", "openai:"):
+        if spec.startswith(prefix):
+            return prefix[:-1], spec[len(prefix):]
     # Default to ollama for bare model names
     return "ollama", spec
 
@@ -91,6 +94,8 @@ def llm_call(
         raw = _call_ollama(model, prompt, timeout)
     elif provider == "claude":
         raw = _call_claude(model, prompt, timeout)
+    elif provider == "openai":
+        raw = _call_openai(model, prompt, timeout)
     else:
         raise ValueError(f"Unknown LLM provider: {provider}")
 
@@ -142,6 +147,39 @@ def _call_claude(model: str, prompt: str, timeout: int) -> str:
         ) from None
     except subprocess.TimeoutExpired:
         raise RuntimeError(f"Claude CLI timed out after {timeout}s") from None
+
+
+def _call_openai(model: str, prompt: str, timeout: int) -> str:
+    """Call OpenAI API and return raw response text.
+
+    Auth: OPENAI_API_KEY env var.
+    """
+    import os
+    import requests
+
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "OPENAI_API_KEY not set. Get one at https://platform.openai.com/api-keys"
+        )
+
+    try:
+        resp = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0,
+            },
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+    except KeyError:
+        raise RuntimeError(f"Unexpected OpenAI response format") from None
+    except Exception as e:
+        raise RuntimeError(f"OpenAI call failed ({model}): {e}") from e
 
 
 def _parse_json_response(raw: str) -> dict:
