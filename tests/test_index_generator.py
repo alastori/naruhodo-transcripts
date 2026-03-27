@@ -237,7 +237,7 @@ class TestGenerateIndexMarkdown:
     """Tests for generate_index_markdown function."""
 
     def test_includes_header(self, sample_episode):
-        content = generate_index_markdown([sample_episode], 1, 0, 0)
+        content = generate_index_markdown([sample_episode])
         assert "# Naruhodo Podcast - Episode Index" in content
 
     def test_includes_episode_count(self, sample_episode):
@@ -245,11 +245,11 @@ class TestGenerateIndexMarkdown:
         assert "Total episodes: 1" in content
 
     def test_includes_table_header(self, sample_episode):
-        content = generate_index_markdown([sample_episode], 1, 0, 0)
+        content = generate_index_markdown([sample_episode])
         assert "| # | Title | Date |" in content
 
     def test_includes_episode_row(self, sample_episode):
-        content = generate_index_markdown([sample_episode], 1, 0, 0)
+        content = generate_index_markdown([sample_episode])
         assert "400" in content
         assert "Por que gostamos" in content
 
@@ -264,7 +264,7 @@ class TestGenerateIndexMarkdown:
             "status": "⬜ Pending",
             "references": [],
         }
-        content = generate_index_markdown([episode], 0, 1, 0)
+        content = generate_index_markdown([episode])
         assert "\\|" in content
 
 

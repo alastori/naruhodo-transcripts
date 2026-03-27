@@ -12,14 +12,25 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from .config import DATA_DIR, EPISODES_JSON, TRANSCRIPTS_DIR
+from .config import (
+    DATA_DIR,
+    EPISODES_JSON,
+    KNOWN_SPEAKERS,
+    QUALITY_MEAN_LOGPROB_THRESHOLD,
+    QUALITY_MIN_SPEAKER_TURNS,
+    QUALITY_REPEATED_6GRAMS_THRESHOLD,
+    TRANSCRIPTS_DIR,
+)
+from .rss_parser import load_episodes as _canonical_load_episodes
 
-KNOWN_SPEAKERS = {"Ken Fujioka", "Altay de Souza"}
 
+def load_episodes_by_number() -> dict[str, dict]:
+    """Load episodes keyed by episode number, excluding replays.
 
-def load_episodes() -> dict[str, dict]:
-    """Load episodes keyed by episode number."""
-    episodes = json.loads(EPISODES_JSON.read_text())
+    Delegates to the canonical load_episodes from rss_parser for safe loading,
+    then indexes by episode number.
+    """
+    episodes = _canonical_load_episodes(EPISODES_JSON)
     by_num = {}
     for ep in episodes:
         num = ep.get("episode_number", "")
@@ -46,11 +57,11 @@ def tier1_whisper_signals():
         ep_num = ep_match.group(1) if ep_match else "?"
 
         flags = []
-        if m.get("mean_logprob", 0) < -0.8:
+        if m.get("mean_logprob", 0) < QUALITY_MEAN_LOGPROB_THRESHOLD:
             flags.append("low_confidence")
         if m.get("high_compression_segments", 0) > len(quality_files) * 0.1:
             flags.append("possible_hallucination")
-        if m.get("repeated_6grams", 0) > 5:
+        if m.get("repeated_6grams", 0) > QUALITY_REPEATED_6GRAMS_THRESHOLD:
             flags.append(f"repeated_ngrams({m['repeated_6grams']})")
         if m.get("words_per_minute", 150) < 100:
             flags.append("low_wpm")
@@ -130,7 +141,7 @@ def tier2_episode_metrics():
         flags = []
         if dominant_pct > 95 and total_segments > 0:
             flags.append("one_speaker_dominant")
-        if total_segments < 10 and duration_min > 20:
+        if total_segments < QUALITY_MIN_SPEAKER_TURNS and duration_min > 20:
             flags.append("few_speaker_turns")
         if intro_ok == False:  # noqa: E712 (explicit False, not None)
             flags.append("intro_misattributed")

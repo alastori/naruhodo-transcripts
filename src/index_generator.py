@@ -131,9 +131,6 @@ def update_episode_status(
 
 def generate_index_markdown(
     episodes: list[dict],
-    downloaded_count: int = 0,
-    pending_count: int = 0,
-    no_link_count: int = 0,
 ) -> str:
     """Generate markdown index content.
 

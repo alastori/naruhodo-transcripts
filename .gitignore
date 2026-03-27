@@ -2,6 +2,7 @@
 data/transcripts/
 *.vtt
 *.quality.json
+*.segments.json
 
 # Deprecated standalone scripts (functionality moved to src/whisper.py + CLI)
 # scripts/

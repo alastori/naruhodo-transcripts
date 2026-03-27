@@ -8,7 +8,7 @@ All Python code in `src/`, prompt templates in `prompts/`, and documentation in 
 
 ## Episode Metadata (CC BY-NC 4.0)
 
-The episode metadata in `data/episodes.json` and `data/episode-index.md` is derived from the Naruhodo podcast's public RSS feed. RSS feeds are intended for syndication and redistribution.
+The episode metadata in `data/episodes.json` and `data/episode-index.md` is derived from the Naruhodo podcast's public RSS feed. This metadata was extracted from the podcast's publicly available RSS feed for research purposes.
 
 This metadata is provided under [Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)](https://creativecommons.org/licenses/by-nc/4.0/).
 
@@ -23,6 +23,8 @@ This metadata is provided under [Creative Commons Attribution-NonCommercial 4.0 
 ### What's in the metadata
 
 The metadata includes: episode titles, dates, durations, topics, episode types, guest names, summaries, classified academic references (with DOIs), audio URLs, and cover art URLs. All of this is derived from the publicly available RSS feed.
+
+**Note:** The `audio_url` field is provided for reference and single-episode playback only. Please do not use it for bulk downloading or redistribution of audio files.
 
 The `raw_description` field preserves the original HTML from the RSS feed for researchers who need the full show notes with formatting.
 
@@ -54,6 +56,10 @@ If you use this project or its metadata, please credit:
 - **Naruhodo Podcast**: http://naruhodo.b9.com.br/
 - **Hosts**: Ken Fujioka and Dr. Altay de Souza
 - **Support the podcast**: https://orelo.cc/naruhodo or https://www.patreon.com/naruhodopodcast
+
+## Takedown
+
+If you are the rights holder of the Naruhodo podcast and would like any data removed from this repository, please open an issue or email the repository maintainer. We will respond promptly and remove the requested content.
 
 ## Questions?
 

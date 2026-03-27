@@ -22,9 +22,14 @@ print = functools.partial(print, flush=True)
 from .config import (
     AUDIO_CACHE_DIR,
     DATA_DIR,
+    DEFAULT_LLM,
     EPISODE_INDEX,
     EPISODES_JSON,
+    KNOWN_SPEAKERS,
     LOGS_DIR,
+    QUALITY_MEAN_LOGPROB_THRESHOLD,
+    QUALITY_MIN_SPEAKER_TURNS,
+    QUALITY_REPEATED_6GRAMS_THRESHOLD,
     TRANSCRIPTS_DIR,
     YOUTUBE_PLAYLIST_URL,
 )
@@ -248,7 +253,7 @@ def cmd_transcribe(args):
 
                 # Check quality flags
                 quality = result.get("quality", {})
-                if quality.get("mean_logprob", 0) < -0.8 or quality.get("repeated_6grams", 0) > 5:
+                if quality.get("mean_logprob", 0) < QUALITY_MEAN_LOGPROB_THRESHOLD or quality.get("repeated_6grams", 0) > QUALITY_REPEATED_6GRAMS_THRESHOLD:
                     results["flagged"] += 1
                     print(f"    ⚠️  Flagged: low confidence or repetition")
 
@@ -324,7 +329,7 @@ def cmd_diarize(args):
         # Check if already diarized (has **Speaker:** lines)
         if not args.force:
             content = transcript_path.read_text(encoding="utf-8")
-            if "**Ken Fujioka:**" in content or "**Altay de Souza:**" in content:
+            if any(f"**{s}:**" in content for s in KNOWN_SPEAKERS):
                 continue
 
         # Check if audio is available
@@ -420,8 +425,9 @@ def cmd_diarize(args):
             # (Check by re-reading the file for segment count)
             content = transcript_path.read_text(encoding="utf-8")
             import re
-            turns = len(re.findall(r"\*\*(Ken Fujioka|Altay de Souza):\*\*", content))
-            if turns < 10:
+            speaker_pattern = "|".join(re.escape(s) for s in KNOWN_SPEAKERS)
+            turns = len(re.findall(rf"\*\*(?:{speaker_pattern}):\*\*", content))
+            if turns < QUALITY_MIN_SPEAKER_TURNS:
                 results["flagged"] += 1
                 print(f"    ⚠️  Flagged: only {turns} speaker turns")
 
@@ -442,18 +448,25 @@ def cmd_diarize(args):
 
 
 def _find_transcript(ep_num: str, title: str):
-    """Find a transcript file for an episode (whisper.md or vtt)."""
+    """Find a transcript file for an episode (whisper.md or vtt).
+
+    Uses a word-boundary regex to avoid matching #5 against #50.
+    """
+    import re
+
     if not TRANSCRIPTS_DIR.exists():
         return None
 
+    pattern = re.compile(rf"#\b{re.escape(ep_num)}\b")
+
     # Prefer whisper.md (higher quality)
     for f in TRANSCRIPTS_DIR.iterdir():
-        if f.name.endswith(".whisper.md") and f"#{ep_num} " in f.name:
+        if f.name.endswith(".whisper.md") and pattern.search(f.name):
             return f
 
     # Fall back to VTT
     for f in TRANSCRIPTS_DIR.iterdir():
-        if f.suffix == ".vtt" and f"#{ep_num} " in f.name:
+        if f.suffix == ".vtt" and pattern.search(f.name):
             return f
 
     return None
@@ -484,7 +497,7 @@ def cmd_status(args):
             elif f.name.endswith(".whisper.md"):
                 whisper_count += 1
                 content = f.read_text(encoding="utf-8")
-                if "**Ken Fujioka:**" in content or "**Altay de Souza:**" in content:
+                if any(f"**{s}:**" in content for s in KNOWN_SPEAKERS):
                     diarized_count += 1
 
     # Count quality flags
@@ -497,19 +510,20 @@ def cmd_status(args):
             try:
                 data = json.loads(f.read_text())
                 m = data.get("metrics", {})
-                if m.get("mean_logprob", 0) < -0.8 or m.get("repeated_6grams", 0) > 5:
+                if m.get("mean_logprob", 0) < QUALITY_MEAN_LOGPROB_THRESHOLD or m.get("repeated_6grams", 0) > QUALITY_REPEATED_6GRAMS_THRESHOLD:
                     flagged_transcribe += 1
             except Exception:
                 pass
         elif f.name.endswith(".whisper.md"):
             content = f.read_text(encoding="utf-8")
-            if "**Ken Fujioka:**" in content or "**Altay de Souza:**" in content:
-                turns = len(re.findall(r"\*\*(Ken Fujioka|Altay de Souza):\*\*", content))
+            if any(f"**{s}:**" in content for s in KNOWN_SPEAKERS):
+                speaker_pat = "|".join(re.escape(s) for s in KNOWN_SPEAKERS)
+                turns = len(re.findall(rf"\*\*(?:{speaker_pat}):\*\*", content))
                 # Get duration from header
                 dur_match = re.search(r"\*\*Duration:\*\* (\d+):(\d+)", content)
                 if dur_match:
                     duration_min = int(dur_match.group(1)) + int(dur_match.group(2)) / 60
-                    if turns < 10 and duration_min > 15:
+                    if turns < QUALITY_MIN_SPEAKER_TURNS and duration_min > 15:
                         flagged_diarize += 1
 
     with_transcript = vtt_count + whisper_count
@@ -591,6 +605,19 @@ def cmd_whisper(args):
     return cmd_transcribe(args)
 
 
+def _cmd_quality_check(args):
+    """Deprecated: proxy to quality.run_quality_check."""
+    from .quality import run_quality_check
+    return run_quality_check(
+        tier=args.tier,
+        cross_validate=args.cross_validate,
+        llm_check=args.llm_check or 0,
+        llm_spec=args.llm,
+        episode=args.episode,
+        as_json=args.json,
+    )
+
+
 def ensure_directories():
     """Create required directories if they don't exist."""
     TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -638,7 +665,7 @@ def main():
     di_parser = subparsers.add_parser("diarize", help="Add speaker labels to transcripts")
     di_parser.add_argument("--episode", type=str, help="Specific episode number")
     di_parser.add_argument("--limit", type=int, default=0, help="Max episodes (0=all)")
-    di_parser.add_argument("--llm", type=str, default="ollama:qwen2.5:72b-instruct-q4_K_M",
+    di_parser.add_argument("--llm", type=str, default=DEFAULT_LLM,
                            help="LLM for speaker ID (e.g., claude:sonnet)")
     di_parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation")
     di_parser.add_argument("--dry-run", action="store_true", help="Show plan without running")
@@ -668,7 +695,7 @@ def main():
     dep_whisper.add_argument("--episode", type=str)
     dep_whisper.add_argument("--model", type=str, default="large-v3")
     dep_whisper.add_argument("--no-diarize", action="store_true")
-    dep_whisper.add_argument("--llm", type=str, default="ollama:qwen2.5:72b-instruct-q4_K_M")
+    dep_whisper.add_argument("--llm", type=str, default=DEFAULT_LLM)
     dep_whisper.add_argument("-y", "--yes", action="store_true")
     dep_whisper.add_argument("--dry-run", action="store_true")
     dep_whisper.add_argument("--keep-audio", action="store_true")
@@ -681,11 +708,7 @@ def main():
     dep_qc.add_argument("--llm", type=str, default="claude:sonnet")
     dep_qc.add_argument("--episode", type=str)
     dep_qc.add_argument("--json", action="store_true")
-    dep_qc.set_defaults(func=_deprecated("status")(lambda args: __import__('src.quality', fromlist=['run_quality_check']).run_quality_check(
-        tier=args.tier, cross_validate=args.cross_validate,
-        llm_check=args.llm_check or 0, llm_spec=args.llm,
-        episode=args.episode, as_json=args.json,
-    )))
+    dep_qc.set_defaults(func=_deprecated("status")(_cmd_quality_check))
 
     args = parser.parse_args()
 

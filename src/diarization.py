@@ -16,10 +16,9 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-logger = logging.getLogger("naruhodo")
+from .config import DEFAULT_LLM, KNOWN_SPEAKERS
 
-# Default LLM for speaker identification (override with --llm flag)
-DEFAULT_LLM = "ollama:qwen2.5:72b-instruct-q4_K_M"
+logger = logging.getLogger("naruhodo")
 
 
 # --- HuggingFace token ---
@@ -91,10 +90,16 @@ def _ensure_wav(audio_path: Path) -> Path:
     wav_path = audio_path.with_suffix(".wav")
     if wav_path.exists():
         return wav_path
-    subprocess.run(
+    result = subprocess.run(
         ["ffmpeg", "-i", str(audio_path), "-ar", "16000", "-ac", "1", str(wav_path), "-y"],
         capture_output=True, timeout=120,
     )
+    if result.returncode != 0:
+        stderr = result.stderr.decode("utf-8", errors="replace") if isinstance(result.stderr, bytes) else result.stderr
+        raise RuntimeError(
+            f"ffmpeg failed to convert {audio_path.name} to WAV (exit code {result.returncode}): "
+            f"{stderr[:300]}"
+        )
     return wav_path
 
 
@@ -326,6 +331,13 @@ def add_diarization_to_transcript(
     )
 
     new_content = header + speaker_info + "\n---\n\n" + "\n\n".join(diarized_lines)
+
+    # Save a backup before overwriting
+    bak_path = output_path.with_suffix(output_path.suffix + ".bak")
+    if output_path.exists():
+        import shutil
+        shutil.copy2(output_path, bak_path)
+
     output_path.write_text(new_content, encoding="utf-8")
 
     return speaker_result

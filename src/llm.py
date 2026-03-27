@@ -18,12 +18,11 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
+from .config import DEFAULT_LLM
+
 logger = logging.getLogger("naruhodo")
 
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
-
-# Default LLM for each use case (can be overridden via --llm flag)
-DEFAULT_LLM = "ollama:qwen2.5:72b-instruct-q4_K_M"
 
 # Ollama config
 OLLAMA_URL = "http://localhost:11434/api/generate"
@@ -32,6 +31,9 @@ OLLAMA_URL = "http://localhost:11434/api/generate"
 def load_prompt(name: str, **kwargs) -> str:
     """Load a prompt template from the prompts/ directory and fill in variables.
 
+    Uses format_map with a defaultdict to safely handle stray braces that
+    may appear in user-supplied values (e.g., guest names containing '{' or '}').
+
     Args:
         name: Prompt filename without extension (e.g., "speaker_id_regular")
         **kwargs: Variables to substitute in the template
@@ -39,11 +41,13 @@ def load_prompt(name: str, **kwargs) -> str:
     Returns:
         Formatted prompt string
     """
+    from collections import defaultdict
+
     path = PROMPTS_DIR / f"{name}.md"
     if not path.exists():
         raise FileNotFoundError(f"Prompt template not found: {path}")
     template = path.read_text(encoding="utf-8")
-    return template.format(**kwargs)
+    return template.format_map(defaultdict(str, **kwargs))
 
 
 def parse_llm_spec(spec: str) -> tuple[str, str]:

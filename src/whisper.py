@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 
 from .config import AUDIO_CACHE_DIR, EPISODES_JSON, TRANSCRIPTS_DIR
+from .rss_parser import _atomic_write, load_episodes as _canonical_load_episodes
 
 logger = logging.getLogger("naruhodo")
 
@@ -39,8 +40,12 @@ INITIAL_PROMPT = (
 
 
 def load_episodes() -> list[dict]:
-    """Load episodes from JSON file."""
-    return json.loads(EPISODES_JSON.read_text(encoding="utf-8"))
+    """Load episodes from JSON file.
+
+    Delegates to the canonical implementation in rss_parser which handles
+    missing files, corrupt data, and schema backfill.
+    """
+    return _canonical_load_episodes(EPISODES_JSON)
 
 
 def get_missing_episodes(episodes: list[dict]) -> list[dict]:
@@ -70,7 +75,7 @@ def _transcript_exists(ep: dict) -> bool:
 def sanitize_filename(title: str) -> str:
     """Create a filesystem-safe filename from episode title."""
     safe = title.replace(":", "\uff1a").replace("?", "\uff1f")
-    safe = re.sub(r'[<>"/\\|*]', "", safe)
+    safe = re.sub(r'[<>"/\\|*/]', "", safe)
     return safe[:100]
 
 
@@ -108,14 +113,31 @@ def estimate_duration(episodes: list[dict]) -> float:
 
 
 def download_audio(audio_url: str, output_path: Path) -> bool:
-    """Download audio file from URL. Returns True on success."""
+    """Download audio file from URL. Returns True on success.
+
+    Downloads to a temp file first, then renames atomically to prevent
+    partial files from jamming the pipeline on crash.
+    """
+    import os
+    import tempfile
+
     try:
         import requests
         response = requests.get(audio_url, stream=True, timeout=120, allow_redirects=True)
         response.raise_for_status()
-        with open(output_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(dir=output_path.parent, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            os.replace(tmp_path, output_path)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
         return True
     except Exception as e:
         logger.error("Download failed: %s", e)
@@ -243,15 +265,15 @@ def save_transcript_markdown(
 
 {result['text']}
 """
-    output_path.write_text(content, encoding="utf-8")
+    _atomic_write(output_path, content)
 
     # Save segments sidecar JSON (for later diarization alignment)
     segments = result.get("segments", [])
     if segments:
         segments_path = output_path.with_suffix(".segments.json")
-        segments_path.write_text(
+        _atomic_write(
+            segments_path,
             json.dumps(segments, indent=2, ensure_ascii=False),
-            encoding="utf-8",
         )
 
     # Save quality sidecar JSON
@@ -265,21 +287,8 @@ def save_transcript_markdown(
             "duration_seconds": duration,
             "metrics": quality,
         }
-        quality_path.write_text(
+        _atomic_write(
+            quality_path,
             json.dumps(quality_data, indent=2, ensure_ascii=False),
-            encoding="utf-8",
         )
 
-
-# Re-export diarization functions for backward compatibility
-from .diarization import (  # noqa: F401, E402
-    DEFAULT_LLM,
-    add_diarization_to_transcript,
-    diarize_audio,
-    get_audio_duration,
-    get_hf_token,
-    identify_speakers,
-    load_diarization_pipeline,
-    merge_transcript_with_diarization,
-    parse_vtt_to_segments,
-)

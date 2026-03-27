@@ -19,7 +19,7 @@ from .logging_config import ProgressLogger
 logger = logging.getLogger("naruhodo")
 
 _RE_EPISODE_NUMBER = re.compile(r"#(\d+)")
-_RE_UNSAFE_CHARS = re.compile(r'[<>"/\\|*]')
+_RE_UNSAFE_CHARS = re.compile(r'[<>"/\\|*/]')
 
 
 @dataclass

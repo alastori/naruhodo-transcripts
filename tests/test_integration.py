@@ -82,7 +82,7 @@ class TestFullWorkflow:
         assert no_link == 2
 
         # Generate index
-        index_content = generate_index_markdown(merged, downloaded, pending, no_link)
+        index_content = generate_index_markdown(merged)
         save_index(index_content, workspace["episode_index"])
         assert workspace["episode_index"].exists()
 

@@ -28,3 +28,14 @@ SUBPROCESS_TIMEOUT = 120  # seconds for yt-dlp commands
 SECONDS_PER_DOWNLOAD = 3  # Average time per download request
 DOWNLOADS_PER_RATE_LIMIT = 60  # Approximate number of downloads before rate limit
 RATE_LIMIT_WAIT_SECONDS = 3600  # 1 hour wait after rate limit
+
+# Default LLM for speaker identification and quality checks
+DEFAULT_LLM = "ollama:qwen2.5:72b-instruct-q4_K_M"
+
+# Known speakers for the Naruhodo podcast
+KNOWN_SPEAKERS = {"Ken Fujioka", "Altay de Souza"}
+
+# Quality thresholds (used by quality checks and transcription flagging)
+QUALITY_MEAN_LOGPROB_THRESHOLD = -0.8
+QUALITY_REPEATED_6GRAMS_THRESHOLD = 5
+QUALITY_MIN_SPEAKER_TURNS = 10
