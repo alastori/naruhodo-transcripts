@@ -1,6 +1,7 @@
 # Transcripts (users download their own)
 data/transcripts/
 *.vtt
+*.quality.json
 
 # Deprecated standalone scripts (functionality moved to src/whisper.py + CLI)
 # scripts/

@@ -159,13 +159,74 @@ def transcribe(audio_path: Path, model: str = "large-v3") -> dict:
     segments = result.get("segments", [])
     duration = segments[-1]["end"] if segments else 0.0
 
+    # Extract quality metrics from segments
+    quality = _compute_quality_metrics(segments, text, duration)
+
     return {
         "text": text,
         "segments": segments,
         "language": result.get("language", "pt"),
         "word_count": len(text.split()),
         "duration_seconds": duration,
+        "quality": quality,
     }
+
+
+def _compute_quality_metrics(
+    segments: list[dict], text: str, duration: float
+) -> dict:
+    """Compute quality metrics from Whisper segments."""
+    if not segments:
+        return {}
+
+    logprobs = [s.get("avg_logprob", 0) for s in segments]
+    compressions = [s.get("compression_ratio", 0) for s in segments]
+    no_speech = [s.get("no_speech_prob", 0) for s in segments]
+    temperatures = [s.get("temperature", 0) for s in segments]
+
+    # Word-level confidence
+    word_probs = []
+    for s in segments:
+        for w in s.get("words", []):
+            if "probability" in w:
+                word_probs.append(w["probability"])
+
+    word_count = len(text.split())
+    wpm = (word_count / duration * 60) if duration > 0 else 0
+
+    # Repeated n-gram detection (hallucination indicator)
+    words = text.lower().split()
+    ngram_size = 6
+    ngrams = [" ".join(words[i:i+ngram_size]) for i in range(len(words) - ngram_size + 1)]
+    from collections import Counter
+    ngram_counts = Counter(ngrams)
+    repeated_ngrams = sum(1 for count in ngram_counts.values() if count > 2)
+
+    # Type-token ratio (vocabulary richness)
+    unique_words = len(set(words))
+    ttr = unique_words / len(words) if words else 0
+
+    metrics = {
+        "segment_count": len(segments),
+        "mean_logprob": sum(logprobs) / len(logprobs),
+        "min_logprob": min(logprobs),
+        "mean_compression_ratio": sum(compressions) / len(compressions),
+        "max_compression_ratio": max(compressions),
+        "high_compression_segments": sum(1 for c in compressions if c > 2.0),
+        "mean_no_speech_prob": sum(no_speech) / len(no_speech),
+        "high_no_speech_segments": sum(1 for p in no_speech if p > 0.6),
+        "fallback_segments": sum(1 for t in temperatures if t > 0),
+        "words_per_minute": round(wpm, 1),
+        "repeated_6grams": repeated_ngrams,
+        "type_token_ratio": round(ttr, 3),
+    }
+
+    if word_probs:
+        metrics["mean_word_probability"] = sum(word_probs) / len(word_probs)
+        metrics["low_confidence_words"] = sum(1 for p in word_probs if p < 0.5)
+        metrics["low_confidence_ratio"] = metrics["low_confidence_words"] / len(word_probs)
+
+    return metrics
 
 
 def save_transcript_markdown(
@@ -174,7 +235,7 @@ def save_transcript_markdown(
     result: dict,
     model: str,
 ) -> None:
-    """Save Whisper transcription result as markdown file."""
+    """Save Whisper transcription result as markdown file and quality sidecar JSON."""
     duration = result["duration_seconds"]
     minutes = int(duration) // 60
     seconds = int(duration) % 60
@@ -191,6 +252,22 @@ def save_transcript_markdown(
 {result['text']}
 """
     output_path.write_text(content, encoding="utf-8")
+
+    # Save quality sidecar JSON
+    quality = result.get("quality", {})
+    if quality:
+        quality_path = output_path.with_suffix(".quality.json")
+        quality_data = {
+            "episode": output_path.stem,
+            "model": model,
+            "word_count": result["word_count"],
+            "duration_seconds": duration,
+            "metrics": quality,
+        }
+        quality_path.write_text(
+            json.dumps(quality_data, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
 
 
 # --- Speaker diarization ---
