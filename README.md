@@ -2,96 +2,91 @@
 
 CLI toolkit and curated metadata for the [Naruhodo podcast](http://naruhodo.b9.com.br/) (Brazilian Portuguese, science). Download YouTube auto-captions or transcribe locally with Whisper. Useful for accessibility, language study, or text analysis.
 
-## What's Included
-
-- **Episode Metadata**: 500+ episodes with structured references, topics, and more (`data/episodes.json`)
-- **Episode Index**: Human-readable catalog (`data/episode-index.md`)
-- **Transcript Tools**: CLI to download YouTube captions or transcribe locally with Whisper
-
-Transcript files are not included. You generate them locally using the `naruhodo` CLI.
-
 ## Quick Start
 
 ```bash
-# Prerequisites: Python 3.10+, uv (https://docs.astral.sh/uv/)
-
 git clone https://github.com/alastori/naruhodo-transcripts.git
 cd naruhodo-transcripts
-uv sync
+uv sync    # Python 3.10+, uv (https://docs.astral.sh/uv/)
 
-# Fetch episode metadata, match YouTube links, download captions
-uv run naruhodo refresh-index
-uv run naruhodo discover-youtube
-uv run naruhodo sync
+naruhodo catalog      # fetch episode metadata + match YouTube links
+naruhodo transcribe   # get transcripts (YouTube captions, Whisper fallback)
+naruhodo status       # see what you have
 ```
 
-The `sync` command shows a time estimate, asks for confirmation, handles YouTube rate limits automatically, and saves progress so you can Ctrl+C and resume.
+## Pipeline
 
-## Local Whisper Transcription (Optional)
+Three stages, each incremental and self-validating:
 
-For episodes without YouTube links, or for higher-quality transcripts, transcribe directly from the podcast audio using [MLX Whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) on Apple Silicon.
+```
+catalog → transcribe → diarize
+              ↑            │
+              └── review flagged, reprocess as needed
+```
+
+| Stage | What it does | Rerun behavior |
+|-------|-------------|----------------|
+| `catalog` | Fetch RSS metadata, match YouTube links | Only fetches new episodes |
+| `transcribe` | Get transcripts (YouTube or Whisper) | Only processes missing episodes |
+| `diarize` | Add speaker labels (Ken vs Altay) | Only processes unlabeled transcripts |
+
+Each stage reports quality metrics and flags suspect episodes. Run `naruhodo status` for the full dashboard.
+
+### Transcribe
 
 ```bash
-# Requires: Apple Silicon Mac, ffmpeg (brew install ffmpeg)
-uv sync --extra whisper                          # transcription only
-uv sync --extra diarize                          # transcription + speaker labels
-
-uv run naruhodo whisper --no-diarize --yes       # plain transcripts
-uv run naruhodo whisper --yes                    # with speaker labels (default)
-uv run naruhodo whisper --llm claude:sonnet --yes  # use Claude for speaker ID
+naruhodo transcribe                          # auto: YouTube when available, Whisper fallback
+naruhodo transcribe --source youtube         # YouTube captions only
+naruhodo transcribe --source whisper         # Whisper only (Apple Silicon, brew install ffmpeg)
+naruhodo transcribe --episode 400            # specific episode
+naruhodo transcribe --dry-run                # preview without running
 ```
 
-Speaker diarization labels each paragraph with the speaker name (Ken Fujioka vs Altay de Souza). It requires a [HuggingFace](https://huggingface.co/join) token and an LLM. See [Diarization Setup](docs/diarization-setup.md) for details.
+Whisper requires `uv sync --extra whisper`. See `naruhodo transcribe --help` for all options.
 
-> **Don't want diarization?** Use `--no-diarize`. No HuggingFace or LLM needed.
-
-## Quality Checks
-
-After transcription, verify quality:
+### Diarize
 
 ```bash
-uv run naruhodo quality-check                  # Whisper signals + episode metrics
-uv run naruhodo quality-check --cross-validate # YouTube vs Whisper WER comparison
-uv run naruhodo quality-check --llm-check 5    # LLM spot-check on flagged episodes
-uv run naruhodo quality-check --json           # machine-readable output
+naruhodo diarize                             # label all unlabeled transcripts
+naruhodo diarize --episode 400               # specific episode
+naruhodo diarize --llm claude:sonnet         # use Claude for speaker ID
+naruhodo diarize --force                     # re-diarize already labeled transcripts
 ```
 
-## Commands
+Requires `uv sync --extra diarize` and a HuggingFace token. See [docs/diarization-setup.md](docs/diarization-setup.md).
 
-| Command | Description |
-|---------|-------------|
-| `naruhodo status` | Show current sync status |
-| `naruhodo refresh-index` | Refresh episode metadata from RSS feed |
-| `naruhodo discover-youtube` | Match YouTube playlist videos to RSS episodes |
-| `naruhodo sync` | Download YouTube auto-captions |
-| `naruhodo whisper` | Transcribe locally with MLX Whisper |
-| `naruhodo quality-check` | Analyze transcript quality |
+### Status
 
-All commands support `--help` for full flag details. Use `-v` before the subcommand for verbose output.
+```bash
+naruhodo status
+```
 
-## Data Schema
+```
+📊 Naruhodo Pipeline Status
 
-See [docs/schema.md](docs/schema.md) for the full `episodes.json` schema and structured reference format.
+  Catalog:     568 episodes
+               514 with YouTube link, 54 without
 
-## Legal
+  Transcribe:  568/568 with transcript
+               487 YouTube VTT, 81 Whisper
+               ⚠️  3 flagged (low confidence)
 
-See [DATA_LICENSE.md](DATA_LICENSE.md) for licensing, usage terms, and fair-use guidance.
+  Diarize:     78/81 Whisper transcripts with speaker labels
+               ⚠️  2 flagged (low turn count)
 
-- **Code**: MIT License ([LICENSE](LICENSE))
-- **Metadata**: CC BY-NC 4.0 ([DATA_LICENSE.md](DATA_LICENSE.md))
+  Next: review flagged episodes
+```
+
+## Reference
+
+- [Data Schema](docs/schema.md) - `episodes.json` fields, structured reference types
+- [Diarization Setup](docs/diarization-setup.md) - HuggingFace, LLM configuration
+- [Data License](DATA_LICENSE.md) - Licensing, usage terms, fair-use guidance
 
 ## Attribution
 
-This project is not affiliated with or endorsed by the Naruhodo podcast.
+Not affiliated with the Naruhodo podcast. **Support them**: [Orelo](https://orelo.cc/naruhodo) | [Patreon](https://www.patreon.com/naruhodopodcast)
 
-- **Naruhodo Podcast**: http://naruhodo.b9.com.br/
-- **Hosts**: Ken Fujioka and Dr. Altay de Souza
-- **Support the podcast**: https://orelo.cc/naruhodo or https://www.patreon.com/naruhodopodcast
+## License
 
-## Contributing
-
-```bash
-uv sync --extra dev
-uv run pytest         # run tests
-uv run ruff check src # lint
-```
+Code: [MIT](LICENSE) | Metadata: [CC BY-NC 4.0](DATA_LICENSE.md)
