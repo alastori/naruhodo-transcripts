@@ -484,7 +484,7 @@ def cmd_whisper(args):
                 mapping = wh.add_diarization_to_transcript(
                     output_path, audio_path, diarization_pipeline,
                     whisper_segments=result.get("segments", []),
-                    ollama_model=args.ollama_model,
+                    llm_spec=args.llm,
                     episode_type=ep_type,
                     guest_name=guest,
                 )
@@ -612,8 +612,8 @@ def main():
         help="Skip speaker diarization",
     )
     whisper_parser.add_argument(
-        "--ollama-model", type=str, default="qwen2.5:72b-instruct-q4_K_M",
-        help="Ollama model for speaker identification",
+        "--llm", type=str, default="ollama:qwen2.5:72b-instruct-q4_K_M",
+        help="LLM for speaker ID: ollama:model or claude:model (e.g., claude:sonnet)",
     )
     whisper_parser.add_argument(
         "-y", "--yes", action="store_true",

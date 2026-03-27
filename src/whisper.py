@@ -39,42 +39,8 @@ INITIAL_PROMPT = (
     "B9, Naruhodo podcast"
 )
 
-# Ollama defaults
-OLLAMA_URL = "http://localhost:11434/api/generate"
-DEFAULT_OLLAMA_MODEL = "qwen2.5:72b-instruct-q4_K_M"
-
-# Speaker identification prompt template
-_SPEAKER_ID_PROMPT = """You are analyzing a transcript from the Naruhodo podcast, a Brazilian Portuguese science podcast.
-
-The regular hosts are:
-- **Ken Fujioka**: the curious layperson who asks questions, presents topics, reads listener messages
-- **Altay de Souza** (Dr.): the scientist who explains and gives the scientific perspective
-
-Some episodes also feature:
-- **Reginaldo Cursino**: the audio engineer who occasionally participates in discussions
-- Guest specialists who explain topics in their domain
-
-The transcript has anonymous speaker labels (SPEAKER_00, SPEAKER_01). Based on the content, speaking patterns, and any self-introductions, determine which label corresponds to which person. Use actual names when you can identify them.
-
-Respond ONLY with valid JSON:
-{{"SPEAKER_00": "name", "SPEAKER_01": "name", "confidence": "high" or "medium" or "low", "evidence": "brief explanation"}}
-
-Transcript:
-{transcript}"""
-
-_SPEAKER_ID_PROMPT_INTERVIEW = """You are analyzing a transcript from a Naruhodo podcast interview episode. In interviews, Ken Fujioka interviews a guest one-on-one (Altay de Souza is NOT present).
-
-The speakers are:
-- **Ken Fujioka**: the interviewer who asks questions, introduces the guest, and guides the conversation
-- **{guest_name}**: the interview guest who answers questions and shares their expertise
-
-The transcript has anonymous speaker labels. Based on the content, speaking patterns, and any introductions, determine which label corresponds to which person.
-
-Respond ONLY with valid JSON:
-{{"SPEAKER_00": "Ken Fujioka" or "{guest_name}", "SPEAKER_01": "Ken Fujioka" or "{guest_name}", "confidence": "high" or "medium" or "low", "evidence": "brief explanation"}}
-
-Transcript:
-{transcript}"""
+# Default LLM for speaker identification (override with --llm flag)
+DEFAULT_LLM = "ollama:qwen2.5:72b-instruct-q4_K_M"
 
 
 # --- Episode helpers ---
@@ -400,16 +366,21 @@ def merge_transcript_with_diarization(
 
 def identify_speakers(
     labeled_segments: list[tuple[str, str]],
-    ollama_model: str = DEFAULT_OLLAMA_MODEL,
+    llm_spec: str = DEFAULT_LLM,
     episode_type: str = "regular",
     guest_name: str = "",
 ) -> dict:
-    """Use Ollama to identify which SPEAKER_XX is Ken vs Altay (and guest for interviews).
+    """Identify which SPEAKER_XX is Ken vs Altay using a pluggable LLM.
 
-    Returns dict with keys: mapping (dict of speaker labels to names),
-    confidence (str), and evidence (str).
+    Args:
+        labeled_segments: List of (speaker_label, text) tuples
+        llm_spec: LLM provider:model spec (e.g., "ollama:qwen2.5:72b", "claude:sonnet")
+        episode_type: "regular" or "interview"
+        guest_name: Guest name for interview episodes
+
+    Returns dict with keys: mapping, confidence, evidence.
     """
-    import requests as req
+    from .llm import llm_call, load_prompt
 
     # Condense to first ~2000 words for the LLM
     lines = []
@@ -420,37 +391,27 @@ def identify_speakers(
         if word_count > 2000:
             break
 
-    if episode_type == "interview" and guest_name:
-        prompt = _SPEAKER_ID_PROMPT_INTERVIEW.format(
-            guest_name=guest_name,
-            transcript="\n\n".join(lines),
-        )
-    else:
-        prompt = _SPEAKER_ID_PROMPT.format(transcript="\n\n".join(lines))
+    transcript = "\n\n".join(lines)
 
     try:
-        resp = req.post(OLLAMA_URL, json={
-            "model": ollama_model,
-            "prompt": prompt,
-            "stream": False,
-            "options": {"temperature": 0},
-        }, timeout=300)
-        resp.raise_for_status()
+        if episode_type == "interview" and guest_name:
+            prompt = load_prompt("speaker_id_interview",
+                                 guest_name=guest_name, transcript=transcript)
+        else:
+            prompt = load_prompt("speaker_id_regular", transcript=transcript)
 
-        raw = resp.json().get("response", "").strip().strip("`").strip()
-        if raw.startswith("json"):
-            raw = raw[4:].strip()
-        mapping = json.loads(raw)
+        result = llm_call(llm_spec, prompt)
+
         return {
             "mapping": {
-                "SPEAKER_00": mapping.get("SPEAKER_00", "SPEAKER_00"),
-                "SPEAKER_01": mapping.get("SPEAKER_01", "SPEAKER_01"),
+                "SPEAKER_00": result.get("SPEAKER_00", "SPEAKER_00"),
+                "SPEAKER_01": result.get("SPEAKER_01", "SPEAKER_01"),
             },
-            "confidence": mapping.get("confidence", "unknown"),
-            "evidence": mapping.get("evidence", ""),
+            "confidence": result.get("confidence", "unknown"),
+            "evidence": result.get("evidence", ""),
         }
     except Exception as e:
-        logger.warning("Ollama speaker ID failed: %s", e)
+        logger.warning("Speaker ID failed (%s): %s", llm_spec, e)
         return {
             "mapping": {
                 "SPEAKER_00": "SPEAKER_00",
@@ -479,7 +440,7 @@ def add_diarization_to_transcript(
     audio_path: Path,
     diarization_pipeline,
     whisper_segments: list[dict],
-    ollama_model: str = DEFAULT_OLLAMA_MODEL,
+    llm_spec: str = DEFAULT_LLM,
     episode_type: str = "regular",
     guest_name: str = "",
 ) -> dict:
@@ -502,7 +463,7 @@ def add_diarization_to_transcript(
         return {"mapping": {}, "confidence": "failed", "evidence": "No segments produced"}
 
     speaker_result = identify_speakers(
-        labeled_segments, ollama_model,
+        labeled_segments, llm_spec=llm_spec,
         episode_type=episode_type, guest_name=guest_name,
     )
     name_map = speaker_result["mapping"]
