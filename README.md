@@ -22,6 +22,11 @@ See **[Data Schema](docs/schema.md)** for the full field reference and a sample 
 > **Optional**, for local speech-to-text with Whisper:
 > - Apple Silicon Mac (M1 or newer)
 > - ffmpeg (`brew install ffmpeg`)
+>
+> **Optional**, for speaker labeling (diarization):
+> - All Whisper prerequisites above
+> - Free [HuggingFace](https://huggingface.co/join) account with accepted model terms ([details](docs/diarization-setup.md))
+> - An LLM: [Ollama](https://ollama.com) (local, free) or Claude CLI
 
 ## Quick Start
 
