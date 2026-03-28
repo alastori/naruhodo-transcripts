@@ -128,7 +128,6 @@ def _call_claude(model: str, prompt: str, timeout: int) -> str:
         "--model", model,
         "--output-format", "text",
         "--no-session-persistence",
-        "--bare",
         prompt,
     ]
 
