@@ -1,0 +1,30 @@
+# Transcript Quality Notes
+
+## Source comparison
+
+| Source | Text quality | Proper nouns | Speaker labels | Speed |
+|--------|-------------|-------------|----------------|-------|
+| **YouTube VTT** | Low. Repeated phrases, `[Música]` tags, garbled text | "Naru Rodolfo", "fiquei Fujioca" | Via diarization only | ~3s/episode |
+| **Whisper large-v3** | High. Clean Portuguese, correct sentences | "Naruhodo", "Ken Fujioka" (with vocabulary hinting) | Via diarization | ~6 min/episode |
+
+YouTube auto-captions are fast and free but the text is noisy. Whisper with vocabulary hinting (`--initial-prompt`) produces significantly better text. For analysis requiring accurate text, run `naruhodo transcribe --source whisper` to upgrade VTT episodes.
+
+## Diarization
+
+Speaker detection uses pyannote community-1 (VBx clustering, MPS). Speaker identification uses an LLM (Claude Sonnet by default).
+
+Typical results on this podcast:
+- **Speaker balance**: Ken 15-27% / Altay 72-84% (Altay explains, Ken asks)
+- **Turn count**: 50-100+ per episode
+- **Intro attribution**: "Eu sou Ken Fujioka" correctly assigned in spot checks
+
+pyannote 3.1 failed on this podcast (95/5 splits). Community-1 (pyannote 4.0) resolved this with VBx clustering.
+
+## Quality flags
+
+The pipeline flags episodes automatically:
+- `low_confidence`: mean logprob below -0.8
+- `repeated_ngrams`: more than 5 repeated 6-grams (often legitimate: sponsor reads, intros)
+- `few_speaker_turns`: fewer than 10 turns for a 20+ min episode
+
+Review flagged episodes with `naruhodo status`.
