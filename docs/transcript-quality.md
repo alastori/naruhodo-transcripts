@@ -20,6 +20,18 @@ Typical results on this podcast:
 
 pyannote 3.1 failed on this podcast (95/5 splits). Community-1 (pyannote 4.0) resolved this with VBx clustering.
 
+## Quality grades
+
+Each episode gets a grade stored in `transcript_quality.grade` in episodes.json:
+
+| Grade | Criteria | Action |
+|-------|----------|--------|
+| **A** | Whisper transcript, confidence >= 0.90, no critical flags | None needed |
+| **B** | Whisper with minor issues, or YouTube VTT with speaker labels | Upgrade to Whisper when time permits |
+| **C** | YouTube VTT without labels, low confidence, or critical flags | Re-transcribe with `naruhodo transcribe --source whisper` |
+
+The `naruhodo status` dashboard shows the grade distribution and suggests the next action.
+
 ## Quality flags
 
 The pipeline flags episodes automatically:

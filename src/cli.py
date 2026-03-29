@@ -149,16 +149,23 @@ def cmd_transcribe(args):
     downloaded, pending, no_link = update_episode_status(episodes, TRANSCRIPTS_DIR)
 
     source = args.source
+    upgrade = args.upgrade if hasattr(args, "upgrade") else False
 
     # Determine what to transcribe
     youtube_episodes = []
     whisper_episodes = []
 
     for ep in episodes:
-        if ep.get("status") == "✅ Downloaded":
+        if args.episode and ep.get("episode_number") != args.episode:
             continue
 
-        if args.episode and ep.get("episode_number") != args.episode:
+        # Skip episodes that already have transcripts (unless upgrading)
+        if ep.get("status") == "\u2705 Downloaded":
+            if upgrade and source in ("whisper", "auto"):
+                # Upgrade: re-transcribe grade-C YouTube VTT episodes with Whisper
+                q = ep.get("transcript_quality", {})
+                if q.get("source") == "youtube_vtt" and q.get("grade") == "C" and ep.get("audio_url"):
+                    whisper_episodes.append(ep)
             continue
 
         if source in ("auto", "youtube") and ep.get("youtube_link") and ep.get("status") == "⬜ Pending":
@@ -536,6 +543,7 @@ def cmd_status(args):
         print(f"               {without} missing\n")
 
     print(f"  Quality:     {grades.get('A', 0)} grade A, {grades.get('B', 0)} grade B, {grades.get('C', 0)} grade C")
+    print(f"               (A=high quality, B=usable, C=needs upgrade)")
     print(f"  Diarize:     {diarized}/{downloaded} with speaker labels")
     if flagged:
         print(f"               ⚠️  {flagged} flagged")
@@ -544,7 +552,7 @@ def cmd_status(args):
     if without > 0:
         print(f"\n  Next: naruhodo transcribe")
     elif grades.get("C", 0) > 0:
-        print(f"\n  Next: upgrade {grades['C']} grade-C episodes (naruhodo transcribe --source whisper)")
+        print(f"\n  Next: upgrade {grades['C']} grade-C episodes (naruhodo transcribe --upgrade --yes)")
     elif diarized < downloaded:
         print(f"\n  Next: naruhodo diarize")
     elif flagged:
@@ -654,6 +662,8 @@ def main():
     tr_parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation")
     tr_parser.add_argument("--dry-run", action="store_true", help="Show plan without running")
     tr_parser.add_argument("--keep-audio", action="store_true", help="Keep downloaded audio")
+    tr_parser.add_argument("--upgrade", action="store_true",
+                           help="Re-transcribe grade-C YouTube episodes with Whisper")
     tr_parser.set_defaults(func=cmd_transcribe)
 
     # diarize

@@ -37,6 +37,7 @@ Each episode in `data/episodes.json` contains:
 | `series` | object\|null | `{"part": N, "total": M}` for multi-part episodes (same topic across episodes), null otherwise |
 | `references` | array | List of external reference URLs (flat, sponsors and self-references filtered) |
 | `structured_references` | array | Classified reference objects (see below) |
+| `transcript_quality` | object\|null | Quality metrics and grade (see below) |
 
 ## Structured References
 
@@ -65,6 +66,24 @@ Each entry in the `structured_references` array:
 | `encyclopedia` | Knowledge bases | wikipedia.org, plato.stanford.edu |
 | `thesis` | Academic theses | teses.usp.br |
 | `other` | Unclassified | Blogs, news, government sites |
+
+## Transcript Quality
+
+Each episode's `transcript_quality` object:
+
+| Field | Type | Values | What to do |
+|-------|------|--------|------------|
+| `source` | string\|null | `"youtube_vtt"`, `"whisper"` | YouTube = low quality text. Upgrade with `naruhodo transcribe --source whisper` |
+| `grade` | string\|null | `"A"`, `"B"`, `"C"` | A = good. B = usable. C = re-process recommended |
+| `word_count` | int\|null | | Check against duration for completeness |
+| `confidence` | float\|null | 0.0-1.0 (Whisper only) | Below 0.90 = re-transcribe |
+| `has_speaker_labels` | bool | | false = run `naruhodo diarize` |
+| `speaker_confidence` | string\|null | `"high"`, `"medium"`, `"low"` | low = re-diarize with `--force` |
+| `flags` | array | see below | Each flag implies a specific fix |
+
+**Grades:** A = Whisper + confidence >= 0.90 + no critical flags. B = Whisper with minor issues, or YouTube VTT with speaker labels. C = YouTube VTT without labels, or low confidence, or critical flags.
+
+**Flags:** `low_confidence`, `incomplete`, `repeated_ngrams`, `few_speaker_turns`, `one_speaker_dominant`, `intro_misattributed`, `high_wpm`, `low_wpm`
 
 ## Example Episode
 
@@ -97,6 +116,15 @@ Each entry in the `structured_references` array:
       "label": "Paper",
       "doi": "10.1000/example"
     }
-  ]
+  ],
+  "transcript_quality": {
+    "source": "whisper",
+    "grade": "A",
+    "word_count": 10236,
+    "confidence": 0.955,
+    "has_speaker_labels": true,
+    "speaker_confidence": "high",
+    "flags": []
+  }
 }
 ```

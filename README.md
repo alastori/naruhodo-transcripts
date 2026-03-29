@@ -105,11 +105,11 @@ naruhodo status
 Naruhodo Pipeline Status
 
   Catalog:     568 episodes
-  Transcribe:  568/568 with transcript (487 YouTube, 81 Whisper)
-  Diarize:     78/81 Whisper transcripts with speaker labels
-               2 flagged (low turn count)
+  Transcribe:  568/568 with transcript (507 YouTube, 20 Whisper)
+  Quality:     14 grade A, 425 grade B, 88 grade C
+  Diarize:     518/568 with speaker labels
 
-  Next: review flagged episodes
+  Next: upgrade 88 grade-C episodes (naruhodo transcribe --source whisper)
 ```
 
 ## Reference
