@@ -114,13 +114,19 @@ def cmd_catalog(args):
         yt_with_link = sum(1 for ep in merged if ep.get("youtube_link"))
         print(f"  YouTube links: {yt_with_link} ({stats['newly_updated']} new)")
 
-    # Save and regenerate index
-    save_episodes(merged, EPISODES_JSON)
+    # Save with quality metrics and regenerate index
     downloaded, pending, no_link = update_episode_status(merged, TRANSCRIPTS_DIR)
+    from .transcript_quality import compute_all_quality, quality_summary
+    compute_all_quality(merged)
+    save_episodes(merged, EPISODES_JSON)
     index_content = generate_index_markdown(merged)
     save_index(index_content, EPISODE_INDEX)
 
+    qs = quality_summary(merged)
+    grades = qs["grades"]
     print(f"\n  Total: {len(merged)} episodes")
+    if grades.get("A") or grades.get("B") or grades.get("C"):
+        print(f"  Quality: {grades.get('A',0)} grade A, {grades.get('B',0)} grade B, {grades.get('C',0)} grade C")
     return 0
 
 
@@ -264,8 +270,10 @@ def cmd_transcribe(args):
             if not args.keep_audio and audio_path.exists():
                 audio_path.unlink()
 
-    # Update status and save
+    # Update status, compute quality, and save
     downloaded, pending, no_link = update_episode_status(episodes, TRANSCRIPTS_DIR)
+    from .transcript_quality import compute_all_quality
+    compute_all_quality(episodes)
     save_episodes(episodes, EPISODES_JSON)
     index_content = generate_index_markdown(episodes)
     save_index(index_content, EPISODE_INDEX)
@@ -497,74 +505,50 @@ def cmd_status(args):
 
     downloaded, pending, no_link = update_episode_status(episodes, TRANSCRIPTS_DIR)
 
-    # Count transcript types
-    vtt_count = 0
-    whisper_count = 0
-    diarized_count = 0
-    if TRANSCRIPTS_DIR.exists():
-        for f in TRANSCRIPTS_DIR.iterdir():
-            if f.suffix == ".vtt":
-                vtt_count += 1
-            elif f.name.endswith(".whisper.md"):
-                whisper_count += 1
-                content = f.read_text(encoding="utf-8")
-                if any(f"**{s}:**" in content for s in KNOWN_SPEAKERS):
-                    diarized_count += 1
+    # Compute quality if not already present
+    from .transcript_quality import compute_all_quality, quality_summary
+    if not any(ep.get("transcript_quality") for ep in episodes):
+        compute_all_quality(episodes)
 
-    # Count quality flags
-    flagged_transcribe = 0
-    flagged_diarize = 0
-    import json
-    import re
-    for f in TRANSCRIPTS_DIR.iterdir() if TRANSCRIPTS_DIR.exists() else []:
-        if f.name.endswith(".quality.json"):
-            try:
-                data = json.loads(f.read_text())
-                m = data.get("metrics", {})
-                if m.get("mean_logprob", 0) < QUALITY_MEAN_LOGPROB_THRESHOLD or m.get("repeated_6grams", 0) > QUALITY_REPEATED_6GRAMS_THRESHOLD:
-                    flagged_transcribe += 1
-            except Exception:
-                pass
-        elif f.name.endswith(".whisper.md"):
-            content = f.read_text(encoding="utf-8")
-            if any(f"**{s}:**" in content for s in KNOWN_SPEAKERS):
-                speaker_pat = "|".join(re.escape(s) for s in KNOWN_SPEAKERS)
-                turns = len(re.findall(rf"\*\*(?:{speaker_pat}):\*\*", content))
-                # Get duration from header
-                dur_match = re.search(r"\*\*Duration:\*\* (\d+):(\d+)", content)
-                if dur_match:
-                    duration_min = int(dur_match.group(1)) + int(dur_match.group(2)) / 60
-                    if turns < QUALITY_MIN_SPEAKER_TURNS and duration_min > 15:
-                        flagged_diarize += 1
-
-    with_transcript = vtt_count + whisper_count
+    qs = quality_summary(episodes)
+    grades = qs["grades"]
+    sources = qs["sources"]
     without = len(episodes) - downloaded
 
+    # Count diarized
+    diarized = sum(1 for ep in episodes
+                   if ep.get("transcript_quality", {}).get("has_speaker_labels"))
+
+    # Count flagged
+    flagged = sum(1 for ep in episodes
+                  if ep.get("transcript_quality", {}).get("flags"))
+
     print(f"\n📊 Naruhodo Pipeline Status\n")
-    print(f"  Catalog:     {len(episodes)} episodes")
 
     yt_linked = sum(1 for ep in episodes if ep.get("youtube_link"))
+    print(f"  Catalog:     {len(episodes)} episodes")
     print(f"               {yt_linked} with YouTube link, {len(episodes) - yt_linked} without\n")
 
     print(f"  Transcribe:  {downloaded}/{len(episodes)} with transcript")
-    if vtt_count or whisper_count:
-        print(f"               {vtt_count} YouTube VTT, {whisper_count} Whisper")
+    if sources.get("youtube_vtt") or sources.get("whisper"):
+        print(f"               {sources.get('youtube_vtt', 0)} YouTube, {sources.get('whisper', 0)} Whisper")
     if without > 0:
-        print(f"               {without} missing")
-    if flagged_transcribe:
-        print(f"               ⚠️  {flagged_transcribe} flagged (low confidence)")
+        print(f"               {without} missing\n")
 
-    print(f"\n  Diarize:     {diarized_count}/{whisper_count} Whisper transcripts with speaker labels")
-    if flagged_diarize:
-        print(f"               ⚠️  {flagged_diarize} flagged (low turn count)")
+    print(f"  Quality:     {grades.get('A', 0)} grade A, {grades.get('B', 0)} grade B, {grades.get('C', 0)} grade C")
+    print(f"  Diarize:     {diarized}/{downloaded} with speaker labels")
+    if flagged:
+        print(f"               ⚠️  {flagged} flagged")
 
     # Hints
     if without > 0:
         print(f"\n  Next: naruhodo transcribe")
-    elif whisper_count > diarized_count:
+    elif grades.get("C", 0) > 0:
+        print(f"\n  Next: upgrade {grades['C']} grade-C episodes (naruhodo transcribe --source whisper)")
+    elif diarized < downloaded:
         print(f"\n  Next: naruhodo diarize")
-    elif flagged_transcribe or flagged_diarize:
-        print(f"\n  Next: review flagged episodes")
+    elif flagged:
+        print(f"\n  Next: review {flagged} flagged episodes")
     else:
         print(f"\n  ✅ Pipeline complete")
 

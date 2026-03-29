@@ -35,10 +35,15 @@ DEFAULT_LLM = "ollama:qwen2.5:72b-instruct-q4_K_M"
 # Known speakers for the Naruhodo podcast
 KNOWN_SPEAKERS = {"Ken Fujioka", "Altay de Souza"}
 
-# Quality thresholds (used by quality checks and transcription flagging)
-QUALITY_MEAN_LOGPROB_THRESHOLD = -0.8
+# Quality thresholds
+QUALITY_CONFIDENCE_THRESHOLD = 0.90  # below this = low confidence flag
 QUALITY_REPEATED_6GRAMS_THRESHOLD = 5
 QUALITY_MIN_SPEAKER_TURNS = 10
+QUALITY_MIN_WPM = 100
+QUALITY_MAX_WPM = 220
+
+# Legacy alias
+QUALITY_MEAN_LOGPROB_THRESHOLD = -0.8
 
 
 # --- Episode naming ---
