@@ -1,5 +1,18 @@
 # Data Schema
 
+~570 episodes, ~7 MB, UTF-8 encoded.
+
+```python
+import json
+episodes = json.load(open("data/episodes.json"))
+print(f"{len(episodes)} episodes")
+```
+
+```bash
+# jq: list all episode titles
+jq '.[].title' data/episodes.json
+```
+
 ## episodes.json
 
 Each episode in `data/episodes.json` contains:
@@ -7,7 +20,7 @@ Each episode in `data/episodes.json` contains:
 | Field | Type | Description |
 |-------|------|-------------|
 | `title` | string | Episode title from RSS feed |
-| `episode_number` | string | Episode number (e.g., "400") or empty |
+| `episode_number` | string | Episode number (e.g., "400") or empty. String because some are empty for unnumbered episodes. |
 | `episode_type` | string | `"regular"`, `"interview"`, `"extra"`, or `"other"` |
 | `topic` | string | Subject extracted from title |
 | `date` | string | Publication date (YYYY-MM-DD) |
@@ -21,7 +34,7 @@ Each episode in `data/episodes.json` contains:
 | `guid` | string | RSS feed GUID (stable unique identifier, used as merge key) |
 | `audio_url` | string | Direct URL to the MP3 audio file (from RSS enclosure) |
 | `image_url` | string | Per-episode cover art URL |
-| `series` | object\|null | `{"part": N, "total": M}` for multi-part episodes, null otherwise |
+| `series` | object\|null | `{"part": N, "total": M}` for multi-part episodes (same topic across episodes), null otherwise |
 | `references` | array | List of external reference URLs (flat, sponsors and self-references filtered) |
 | `structured_references` | array | Classified reference objects (see below) |
 

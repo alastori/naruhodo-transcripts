@@ -4,14 +4,14 @@
 
 | Source | Text quality | Proper nouns | Speaker labels | Speed |
 |--------|-------------|-------------|----------------|-------|
-| **YouTube VTT** | Low. Repeated phrases, `[Música]` tags, garbled text | "Naru Rodolfo", "fiquei Fujioca" | Via diarization only | ~3s/episode |
+| **YouTube VTT (Web Video Text Tracks)** | Low. Repeated phrases, `[Música]` tags, garbled text | "Naru Rodolfo", "fiquei Fujioca" | Via diarization only | ~3s/episode |
 | **Whisper large-v3** | High. Clean Portuguese, correct sentences | "Naruhodo", "Ken Fujioka" (with vocabulary hinting) | Via diarization | ~6 min/episode |
 
 YouTube auto-captions are fast and free but the text is noisy. Whisper with vocabulary hinting (`--initial-prompt`) produces significantly better text. For analysis requiring accurate text, run `naruhodo transcribe --source whisper` to upgrade VTT episodes.
 
 ## Diarization
 
-Speaker detection uses pyannote community-1 (VBx clustering, MPS). Speaker identification uses an LLM (Claude Sonnet by default).
+Speaker detection uses pyannote community-1 (VBx clustering, MPS). Speaker identification uses an LLM (Ollama with qwen2.5:72b by default, configurable via `--llm`).
 
 Typical results on this podcast:
 - **Speaker balance**: Ken 15-27% / Altay 72-84% (Altay explains, Ken asks)

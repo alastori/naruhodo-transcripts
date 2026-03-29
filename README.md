@@ -38,10 +38,12 @@ git clone https://github.com/alastori/naruhodo-transcripts.git
 cd naruhodo-transcripts
 uv sync
 
-naruhodo catalog
-naruhodo transcribe
-naruhodo status
+uv run naruhodo catalog
+uv run naruhodo transcribe
+uv run naruhodo status
 ```
+
+Transcripts are saved as text files in `data/transcripts/` (one per episode). The YouTube-subtitle path works on any OS. Whisper and diarization require Apple Silicon.
 
 **What these commands do:**
 
@@ -114,7 +116,19 @@ Naruhodo Pipeline Status
 
 - [Data Schema](docs/schema.md) - `episodes.json` fields, reference types
 - [Speaker Labeling Setup](docs/diarization-setup.md) - HuggingFace, LLM configuration
+- [Transcript Quality](docs/transcript-quality.md) - Source comparison, quality flags
 - [Data License](DATA_LICENSE.md) - Licensing, usage terms
+
+## Contributing
+
+```bash
+uv sync --extra dev
+uv run pytest              # run tests
+uv run ruff check src/     # lint
+uv run pytest --cov        # coverage
+```
+
+Architecture: `rss_parser` fetches the RSS feed and builds `episodes.json`. `youtube_discovery` matches YouTube videos. `downloader` fetches VTT captions. `whisper` generates local transcripts. `diarization` labels speakers using `llm` (pluggable: Ollama, Claude, Codex, OpenAI). `quality` computes metrics. `cli` orchestrates the pipeline.
 
 ## Attribution
 
