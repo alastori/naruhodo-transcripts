@@ -1,7 +1,7 @@
 # Naruhodo Podcast - Episode Index
 
 Total episodes: 568
-Last updated: 2026-03-27
+Last updated: 2026-03-29
 
 ## Episodes
 
