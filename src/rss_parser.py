@@ -193,9 +193,18 @@ def parse_duration(duration_str: str) -> str:
 
 
 def extract_episode_number(title: str) -> str:
-    """Extract episode number from title."""
+    """Extract episode number from title.
+
+    Matches '#NNN' first (standard), then 'Naruhodo NNN' without # (edge case).
+    """
     match = _RE_EPISODE_NUMBER.search(title)
-    return match.group(1) if match else ""
+    if match:
+        return match.group(1)
+    # Fallback: "Naruhodo 318 - ..." (missing # in RSS feed)
+    match = re.search(r"Naruhodo\s+(\d+)\s*[-–—]", title)
+    if match:
+        return match.group(1)
+    return ""
 
 
 def extract_episode_type(title: str) -> str:
@@ -208,6 +217,9 @@ def extract_episode_type(title: str) -> str:
     if "Extra" in title:
         return "extra"
     if _RE_REGULAR_TITLE.search(title):
+        return "regular"
+    # Fallback: "Naruhodo 318 - ..." (missing # in RSS feed)
+    if re.search(r"Naruhodo\s+\d+\s*[-–—]", title):
         return "regular"
     return "other"
 
