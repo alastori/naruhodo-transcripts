@@ -258,7 +258,8 @@ def _compute_flags(
 
 def _compute_grade(source, confidence, has_speaker_labels, flags) -> str:
     """Compute A/B/C grade from quality signals."""
-    critical_flags = {"incomplete", "few_speaker_turns", "intro_misattributed", "one_speaker_dominant"}
+    critical_flags = {"incomplete", "few_speaker_turns", "intro_misattributed"}
+    # one_speaker_dominant is expected for interviews (guest speaks most)
     has_critical = bool(set(flags) & critical_flags)
 
     if source == "whisper":
