@@ -1,12 +1,13 @@
 # Naruhodo Podcast - Episode Index
 
-Total episodes: 568
-Last updated: 2026-03-29
+Total episodes: 569
+Last updated: 2026-03-30
 
 ## Episodes
 
 | # | Title | Date | Duration | Type | Guest | Summary | References |
 |---|-------|------|----------|------|-------|---------|------------|
+| 64 | Naruhodo Entrevista #64: Diogo Cortiz | 2026-03-30 | 01:24:09 | interview | Diogo Cortiz | Entrevista: Professor, graduado em Sistemas de Informação, com especialização em Neurociência, | [Ref1](http://nic.br/) [Naruhodo](http://naruhodo.b9.com.br/) [Naruhodo](http://naruhodo.b9.com.br) [Lattes](http://lattes.cnpq.br/6494551464509082) |
 | 462 | Naruhodo #462 - Por que gostamos do que gostamos? | 2026-03-23 | 00:58:47 | regular |  | Quando criança, o Altay já quis ser astronauta. Depois, passou. | [Naruhodo](http://naruhodo.b9.com.br/) [Naruhodo](http://naruhodo.b9.com.br) [Ref1](https://monoskop.org/images/e/e0/Pierre_Bourdieu_Distinction_A_Social_Critique_of_the_Judgement_of_Taste_1984.pdf) [Paper](https://www.sciencedirect.com/science/article/abs/pii/S1447677018300755) [Book](https://books.google.com.br/books?hl=en&lr=&id=gJOoEQAAQBAJ&oi=fnd&pg=PP1&ots=tVyVpAQEsO&sig=hqfZ-5_L7_qXoqF2hdC1jRtJBWI&redir_esc=y#v=onepage&q&f=false) |
 | 63 | Naruhodo Entrevista #63: Claudinei Biazoli | 2026-03-16 | 01:20:52 | interview | Claudinei Biazoli | Entrevista: Professor, Psiquiatra, Bacharel em Ciências Moleculares e Doutor em Radiologia, Claudinei Biazoli. | [Naruhodo](http://naruhodo.b9.com.br/) [Naruhodo](http://naruhodo.b9.com.br) [Lattes](http://lattes.cnpq.br/1530049503337087) |
 | 461 | Naruhodo #461 - O que é a teoria da Incompletude de Godel? | 2026-03-09 | 00:53:50 | regular |  | Kurt Friedrich Gödel foi um austríaco que, em 1931, formulou teoremas que marcaram uma mudança profunda na lógica | [Naruhodo](http://naruhodo.b9.com.br/) [Naruhodo](http://naruhodo.b9.com.br) [Ref1](https://www.deviante.com.br/podcasts/scicast-474/) [Video](https://www.youtube.com/watch?v=kW21iEryZvY&t=5s) [Ref2](https://www.leseditionsdeminuit.fr/livre-La_Condition_postmoderne-2180-1-1-0-1.html) |
