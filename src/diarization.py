@@ -33,7 +33,7 @@ def get_hf_token() -> Optional[str]:
     # Fallback: 1Password
     try:
         result = subprocess.run(
-            ["op", "read", "op://AI-Agents/HuggingFace/naruhodo-transcripts/token"],
+            ["op", "read", "op://AI-Agents/HuggingFace Tokens/naruhodo-transcripts/token"],
             capture_output=True, text=True, timeout=10,
         )
         if result.returncode == 0 and result.stdout.strip():
