@@ -25,6 +25,8 @@ uv sync --extra diarize
    export HF_TOKEN="hf_your_token_here"
    ```
 
+   Or keep a Keychain copy, which each run reads before 1Password (service `naruhodo-transcripts`, account `HF_TOKEN`); 1Password stays the source of truth, so refresh the copy after rotating the token.
+
 ## LLM Setup
 
 The speaker identification step uses an LLM to determine which anonymous speaker label (SPEAKER_00, SPEAKER_01) corresponds to Ken Fujioka vs Altay de Souza. This is pluggable via `--llm`:
