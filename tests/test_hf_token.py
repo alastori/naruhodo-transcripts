@@ -67,3 +67,14 @@ def test_keychain_timeout_falls_back(fake):
 def test_nothing_available_returns_none(fake):
     fake(keychain=(44, ""), op=(1, ""))
     assert diarization.get_hf_token() is None
+
+
+def test_no_security_binary_falls_back(fake):
+    run = fake(raise_on=("/usr/bin/security", FileNotFoundError("/usr/bin/security")))
+    assert diarization.get_hf_token() == "hf_from_op"
+    assert [call[0] for call in run.calls] == ["/usr/bin/security", "op"]
+
+
+def test_op_permission_error_returns_none(fake):
+    fake(keychain=(44, ""), raise_on=("op", PermissionError("op")))
+    assert diarization.get_hf_token() is None
