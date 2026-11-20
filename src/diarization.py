@@ -24,17 +24,54 @@ logger = logging.getLogger("naruhodo")
 # --- HuggingFace token ---
 
 
+KEYCHAIN_SERVICE = "naruhodo-transcripts"
+KEYCHAIN_ACCOUNT = "HF_TOKEN"
+# Absolute path: the Keychain item trusts only this binary, and PATH must not choose it.
+SECURITY = "/usr/bin/security"
+OP_REFERENCE = "op://AI-Agents/HuggingFace Tokens/naruhodo-transcripts/token"
+
+
+def _usable(value: str) -> bool:
+    return bool(value) and value == value.strip() and "\n" not in value
+
+
+def _keychain_hf_token() -> Optional[str]:
+    """Read the Keychain copy of the token; None when it is missing or unusable."""
+    try:
+        result = subprocess.run(
+            [SECURITY, "find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", KEYCHAIN_ACCOUNT, "-w"],
+            capture_output=True, text=True, timeout=10, stdin=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    value = result.stdout.rstrip("\n") if result.returncode == 0 else ""
+    return value if _usable(value) else None
+
+
 def get_hf_token() -> Optional[str]:
-    """Get HuggingFace token from HF_TOKEN env var or 1Password."""
+    """Get the HuggingFace token: HF_TOKEN env var, then the Keychain copy, then 1Password.
+
+    1Password is the source of truth; the Keychain copy (service naruhodo-transcripts,
+    account HF_TOKEN) keeps ordinary runs from calling 1Password. A missing copy is
+    reported once so it can be refreshed.
+    """
     token = os.environ.get("HF_TOKEN")
     if token:
         return token
 
+    token = _keychain_hf_token()
+    if token:
+        return token
+    logger.info(
+        "Keychain copy of the HuggingFace token missing or unusable "
+        "(service %s, account %s); reading 1Password", KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT,
+    )
+
     # Fallback: 1Password
     try:
         result = subprocess.run(
-            ["op", "read", "op://AI-Agents/HuggingFace Tokens/naruhodo-transcripts/token"],
-            capture_output=True, text=True, timeout=10,
+            ["op", "read", OP_REFERENCE],
+            capture_output=True, text=True, timeout=10, stdin=subprocess.DEVNULL,
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
